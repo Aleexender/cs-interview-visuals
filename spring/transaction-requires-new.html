@@ -36,54 +36,66 @@
   .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .vs .card h3 { margin: 0 0 6px; font-size: 16px; }
 
-  /* 스텝 무대 */
-  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  /* 디버거 */
+  .dbg { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #0d1116; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 12px; background: #161b22; border-bottom: 1px solid var(--line); }
+  .modes { display: flex; gap: 6px; flex-wrap: wrap; }
+  .modes button { font-size: 13px; padding: 5px 11px; }
   .modes button.on { border-color: var(--mid); background: #2a2416; }
-  .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 230px; gap: 18px; }
-  .lane-t { font-size: 12.5px; color: var(--dim); margin-bottom: 8px; font-weight: 700; }
-  .lane-t b { color: var(--text); }
-  .stack { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: #11161c; min-height: 300px; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; }
-  .stack .lt { font-size: 12px; color: var(--dim); margin-bottom: auto; }
-  .frame { padding: 6px 10px; border-radius: 7px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
-  .frame.px1 { background: #1b2a40; color: var(--blue); }
-  .frame.px2 { background: #2a2140; color: var(--violet); }
-  .frame.cur { outline: 2px solid var(--blue); }
-  .frame.boom { outline: 2px solid var(--no); background: #3a1a22; color: var(--no); font-weight: 700; }
-  .frame.catch { outline: 2px solid var(--mid); background: #2a2416; color: var(--mid); }
-  .frame .ex { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; padding: 0 7px; border-radius: 99px; background: var(--no); color: #0f1419; font-weight: 700; }
-
-  .tx { display: grid; gap: 10px; }
-  .locker { border: 2px solid var(--mid); border-radius: 12px; padding: 10px 12px; background: #221e12; }
-  .locker .t, .shelf .t { font-weight: 700; font-size: 13.5px; }
-  .locker .t { color: var(--mid); }
-  .shelf { border: 2px dashed var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; transition: all .25s; }
-  .shelf.on { border-color: var(--violet); background: #1f1a2c; }
-  .shelf .t { color: var(--violet); }
-  .phys { border: 2px solid var(--ok); border-radius: 12px; padding: 9px 12px; background: #11201a; font-size: 13.5px; transition: all .25s; }
-  .phys .h { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
-  .phys .h .st { font-size: 12px; padding: 0 8px; border-radius: 99px; background: #0f1419; font-weight: 600; white-space: nowrap; }
-  .phys.p2 { border-color: var(--violet); background: #1f1a2c; }
-  .phys.flag { border-color: var(--no); background: #2c1a1e; }
-  .phys.done-ok { opacity: .85; }
-  .phys.done-rb { border-style: dashed; opacity: .75; }
-  .phys.susp { opacity: .55; border-style: dashed; }
-  .logic { margin-top: 6px; padding: 4px 9px; border-radius: 7px; font-size: 12.5px; }
-  .logic.l1 { background: #1b2a40; color: var(--blue); }
-  .logic.l2 { background: #2a2140; color: var(--violet); }
-  .chip { display: inline-block; padding: 1px 9px; border-radius: 99px; background: #183a2b; color: var(--ok); font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; margin: 2px 4px 2px 0; }
+  .dbtn { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+  .dbtn button { padding: 5px 12px; font-size: 13px; }
+  .counter { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--dim); min-width: 64px; text-align: right; }
+  .dbg-main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); min-height: 420px; }
+  .editor { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  .ftabs { display: flex; background: #161b22; border-bottom: 1px solid var(--line); }
+  .ftab { padding: 7px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--dim); cursor: pointer; border-right: 1px solid var(--line); }
+  .ftab.on { background: #0d1116; color: var(--text); box-shadow: inset 0 2px 0 var(--blue); }
+  .ftab.here::after { content: " ●"; color: var(--blue); }
+  .who { padding: 6px 14px; font-size: 12.5px; color: var(--mid); background: #1a1810; border-bottom: 1px solid var(--line); min-height: 30px; }
+  .code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.75; padding: 8px 0; flex: 1; overflow-x: auto; }
+  .ln { display: grid; grid-template-columns: 22px 34px 1fr; white-space: pre; }
+  .ln .g { text-align: center; color: var(--blue); }
+  .ln .no2 { color: #4a5563; text-align: right; padding-right: 12px; user-select: none; }
+  .ln.cur { background: #1b2a40; }
+  .ln.cur.ex { background: #3a1a22; }
+  .ln.cur.ex .g { color: var(--no); }
+  .tk-k { color: #ff7b72; } .tk-a { color: var(--mid); } .tk-s { color: #a5d6ff; } .tk-c { color: #6e7a87; font-style: italic; } .tk-n { color: #79c0ff; }
+  .side { display: grid; grid-template-rows: auto 1fr; }
+  .panel .ph { padding: 6px 12px; font-size: 12px; font-weight: 700; color: var(--dim); background: #161b22; border-bottom: 1px solid var(--line); border-top: 1px solid var(--line); }
+  .side .panel:first-child .ph { border-top: none; }
+  .frames { padding: 4px 0; }
+  .fr { display: flex; justify-content: space-between; gap: 10px; padding: 4px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .fr .loc { color: var(--dim); }
+  .fr.top { background: #1b2a40; }
+  .fr.px1 .fn { color: var(--blue); } .fr.px2 .fn { color: var(--violet); }
+  .fr.exf { background: #3a1a22; }
+  .fr.exf .fn::before { content: "💥 "; }
+  .vars { padding: 6px 0; font-size: 13px; }
+  .vr { display: grid; grid-template-columns: 26px 140px 1fr; gap: 4px; padding: 4px 12px; align-items: start; transition: background .4s; }
+  .vr .vk { color: var(--dim); }
+  .vr .vv { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .vr.chg { background: #2a2416; }
+  .vr.chg .vk::after { content: " ✎"; color: var(--mid); }
+  .chip { display: inline-block; padding: 0 8px; border-radius: 99px; background: #183a2b; color: var(--ok); font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin: 1px 4px 1px 0; }
   .chip.v { background: #2a2140; color: var(--violet); }
-  .chip.x { background: #252d38; color: var(--dim); text-decoration: line-through; }
+  .chip.r { background: #3a1a22; color: var(--no); }
+  .chip.d { background: #252d38; color: var(--dim); }
+  .txline { display: block; margin: 1px 0; }
+  .big { font-size: 20px; font-weight: 800; }
+  .dbg-bottom { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); border-top: 1px solid var(--line); }
+  .console { border-right: 1px solid var(--line); }
+  .clog { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; line-height: 1.6; padding: 6px 12px; height: 190px; overflow-y: auto; }
+  .clog div { white-space: pre-wrap; color: #59636e; }
+  .clog div.new { color: var(--text); }
+  .clog div.sql.new { color: #a5d6ff; } .clog div.cw.new { color: var(--mid); } .clog div.err.new { color: var(--no); }
+  .clog .lv { color: #6e7a87; }
+  .narr2 { padding: 10px 14px; }
+  .narr2 .title { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; }
+  .narr2 .d { font-size: 14px; }
+  .kbd { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 11.5px; font-family: ui-monospace, Menlo, monospace; }
 
-  .meter { border: 2px solid var(--line); border-radius: 12px; padding: 12px; background: #141a21; text-align: center; }
-  .meter .n { font-size: 44px; font-weight: 800; line-height: 1.1; }
-  .meter .l { font-size: 12.5px; color: var(--dim); }
-  .pool { margin-top: 10px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
   .slot { padding: 6px 0; border-radius: 6px; background: #1e2630; border: 1px solid var(--line); font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; text-align: center; }
   .slot.a { background: #183a2b; color: var(--ok); border-color: var(--ok); }
-  .slot.b { background: #2a2140; color: var(--violet); border-color: var(--violet); }
-  .db { margin-top: 10px; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; font-size: 13px; text-align: left; }
-  .db .r { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed var(--line); }
-  .db .r:last-child { border-bottom: none; }
 
   .ctrl { display: flex; gap: 10px; align-items: center; margin: 16px 0 12px; flex-wrap: wrap; }
   button { font: inherit; padding: 8px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
@@ -178,34 +190,38 @@ class OrderService(...) {
 
   <!-- 3 -->
   <section>
-    <h2><span class="num">3</span>단계별 비교 — 호출 스택 · 트랜잭션 · 커넥션 수를 한 화면에</h2>
-    <div class="modes">
-      <button data-m="NEW" class="on">REQUIRES_NEW + catch (질문 상황)</button>
-      <button data-m="REQ">REQUIRED + catch (꼬리질문 9)</button>
-      <button data-m="NOCATCH">REQUIRES_NEW + catch 없음 (예외가 전파된다는 증거)</button>
-    </div>
-    <div class="stage">
-      <div>
-        <div class="lane-t">📚 <b>호출 스택</b> — 예외 전파 (JVM)</div>
-        <div class="stack" id="stk"></div>
+    <h2><span class="num">3</span>디버거로 따라가기 — 코드 한 줄씩, 그때의 스택 · 변수 · 로그</h2>
+    <div class="dim" style="font-size:14px;margin-bottom:12px">IntelliJ 디버거처럼 봅니다. <b>왼쪽</b> 지금 실행 중인 줄(▶, 예외면 ⚡) · <b>오른쪽 위</b> 호출 스택(Frames) · <b>오른쪽</b> 변수(✎ = 이번 줄에서 바뀐 값) · <b>아래</b> 스프링 DEBUG 로그. <span class="kbd">→</span> <span class="kbd">←</span> 키로 한 줄씩.</div>
+    <div class="dbg">
+      <div class="toolbar">
+        <div class="modes">
+          <button data-m="NEW" class="on">REQUIRES_NEW + catch (질문 상황)</button>
+          <button data-m="REQ">REQUIRED + catch (꼬리질문 9)</button>
+          <button data-m="NOCATCH">REQUIRES_NEW + catch 없음</button>
+        </div>
+        <div class="dbtn">
+          <button id="first" title="처음">⏮</button>
+          <button id="prev" title="한 줄 뒤로 (←)">◀ Step Back</button>
+          <button id="next" class="primary" title="한 줄 실행 (→)">Step ▶</button>
+          <span class="counter" id="counter"></span>
+        </div>
       </div>
-      <div>
-        <div class="lane-t">🔀 <b>트랜잭션</b> — 트랜잭션 전파 (스프링)</div>
-        <div class="tx" id="tx"></div>
+      <div class="dbg-main">
+        <div class="editor">
+          <div class="ftabs" id="ftabs"></div>
+          <div class="who" id="who"></div>
+          <div class="code" id="code"></div>
+        </div>
+        <div class="side">
+          <div class="panel"><div class="ph">📚 Frames · 스레드 http-nio-8080-exec-7 (위가 최신)</div><div class="frames" id="frames"></div></div>
+          <div class="panel"><div class="ph">🔎 Variables</div><div class="vars" id="vars"></div></div>
+        </div>
       </div>
-      <div>
-        <div class="lane-t">🔌 <b>이 요청이 쥔 커넥션</b></div>
-        <div class="meter"><div class="n" id="held">0</div><div class="l">개</div>
-          <div class="pool" id="pool"></div></div>
-        <div class="db" id="db"></div>
+      <div class="dbg-bottom">
+        <div class="panel console"><div class="ph">🖥 Console · logging.level.org.springframework.transaction=DEBUG (흐린 줄 = 이전 단계)</div><div class="clog" id="clog"></div></div>
+        <div class="panel"><div class="ph">💬 지금 무슨 일?</div><div class="narr2" id="narr"></div></div>
       </div>
     </div>
-    <div class="ctrl">
-      <button id="prev">◀ 이전</button>
-      <button id="next" class="primary">다음 ▶</button>
-      <div class="dots" id="dots"></div>
-    </div>
-    <div class="narr" id="narr"></div>
     <table style="margin-top:16px">
       <tr><th></th><th>REQUIRED</th><th>REQUIRES_NEW</th></tr>
       <tr><td>물리 트랜잭션</td><td>1개 (참여)</td><td>2개 (바깥은 <b>일시 중단</b>)</td></tr>
@@ -256,93 +272,221 @@ class OrderService(...) {
 
 <script>
 const $ = id => document.getElementById(id);
-const F = (t, c = '', ex = '') => ({ t, c, ex });
-const TOM = F('톰캣 → 컨트롤러');
-/* tx 상태: locker(문자열), shelf(문자열|null), phys[] {name, conn, role, st, cls, logic[]} */
-const P1 = (st, cls = '', logic = ['l1']) => ({ name: '물리 #1', conn: 'conn#42', st, cls, logic });
-const P2 = (st, cls = 'p2') => ({ name: '물리 #2', conn: 'conn#43', st, cls, logic: ['l2'] });
-const L = { l1: '논리 · order() (주인)', l2: '논리 · use()', l2g: '논리 · use() (손님)', l2o: '논리 · use() (주인)' };
-const DB0 = { s: '10', o: '없음' }, DBU = { s: '9 (미확정)', o: '1건 (미확정)' };
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const base0 = [
-  { t: 'order() 프록시 진입 → 새 물리 트랜잭션 (conn#42)', d: '사물함이 비어 있으니 주인이 되어 conn#42를 꺼내 바인딩합니다.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()', 'cur')], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['a'], db: DB0 },
-  { t: '① ② 실행 (conn#42)', d: 'UPDATE, INSERT. 아직 커밋 전입니다.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  ① ②  try {', 'cur')], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['a'], db: DBU },
-];
+/* ── 소스 파일 ── */
+const ORDER = `@Service
+class OrderService(
+    private val stockRepository: StockRepository,
+    private val orderRepository: OrderRepository,
+    private val pointService: PointService,
+) {
+    @Transactional
+    fun order(userId: Long, productId: Long) {
+        stockRepository.decrease(productId)              // ① 재고 차감
+        orderRepository.save(Order(userId, productId))   // ② 주문 저장
+        try {
+            pointService.use(userId, 1000)               // ③ 포인트 차감
+        } catch (e: PointNotEnoughException) {
+            log.warn("포인트 부족, 주문은 진행")
+        }
+    }
+}`;
+const ORDER_NC = `@Service
+class OrderService(
+    private val stockRepository: StockRepository,
+    private val orderRepository: OrderRepository,
+    private val pointService: PointService,
+) {
+    @Transactional
+    fun order(userId: Long, productId: Long) {
+        stockRepository.decrease(productId)              // ① 재고 차감
+        orderRepository.save(Order(userId, productId))   // ② 주문 저장
+        pointService.use(userId, 1000)                   // ③ try/catch 없음
+    }
+}`;
+const POINT = prop => `@Service
+class PointService {
+    ${prop}
+    fun use(userId: Long, amount: Int) {
+        throw PointNotEnoughException()                  // RuntimeException
+    }
+}`;
+const PROXY = `// @Transactional 프록시가 하는 일 (스프링 TransactionInterceptor 단순화)
+fun invokeWithinTransaction(target, method, args) {
+    val tx = txManager.getTransaction(attr)   // 사물함 확인 → 시작 / 참여 / 중단
+    try {
+        val ret = method.invoke(target, args) // 진짜 메서드 호출
+        txManager.commit(tx)                  // 정상 반환 → commit (🚩면 rollback)
+        return ret
+    } catch (e: RuntimeException) {
+        txManager.rollback(tx)                // 주인: 진짜 rollback / 손님: 🚩 표시
+        throw e                               // 예외는 그대로 호출한 쪽으로
+    }
+}`;
 
-const NEW = base0.concat([
-  { t: '⭐ use() 프록시 진입 → 사물함에 있음 → REQUIRES_NEW → 바깥을 <b>일시 중단(suspend)</b>', d: 'conn#42를 사물함에서 <b>빼서 보관함으로</b> 옮깁니다. <b>반납이 아닙니다.</b> conn#42의 트랜잭션(①②)은 아직 끝나지 않았으니 풀로 돌려보낼 수 없어요.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (REQUIRES_NEW)', 'px2')], locker: '', shelf: 'conn#42', phys: [P1('일시 중단', 'susp')], held: ['a'], db: DBU,
-    src: 'handleExistingTransaction(): PROPAGATION_REQUIRES_NEW → suspend(transaction)' },
-  { t: '⭐ 새 커넥션 conn#43으로 물리 #2 시작 → <b>이 요청이 2개를 쥠</b>', d: '사물함이 비었으니 처음처럼 풀에서 하나를 더 꺼내 새 물리 트랜잭션을 엽니다. use()는 <b>물리 #2의 주인</b>이에요. 오른쪽 숫자가 <b>2</b>가 되는 순간이 풀 데드락의 씨앗입니다.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (주인)', 'px2'), F('use()', 'cur')], locker: 'conn#43', shelf: 'conn#42', phys: [P1('일시 중단', 'susp'), P2('진행 중')], held: ['a', 'b'], db: DBU,
-    src: 'startTransaction() → doBegin(): getConnection() → setAutoCommit(false) → bindResource' },
-  { t: 'use()에서 💥 PointNotEnoughException', d: '예외가 use() 프레임에서 생겼습니다.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (주인)', 'px2'), F('use()', 'boom', '💥')], locker: 'conn#43', shelf: 'conn#42', phys: [P1('일시 중단', 'susp'), P2('진행 중')], held: ['a', 'b'], db: DBU },
-  { t: '⭐ 안쪽 프록시: 주인이니 <b>자기 것(conn#43)만</b> 진짜 rollback → 반납 → 바깥 복원(resume)', d: '물리 #2만 롤백됩니다. 물리 #1에는 <b>아무 표시도 안 남아요</b> (REQUIRED와의 차이). conn#43은 반납, conn#42는 사물함으로 돌아옵니다. 그리고 <b>예외는 그대로 위로 던져요 — 예외 전파.</b>',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 → rollback · throw', 'boom', '💥↑')], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 done-rb')], held: ['a'], db: DBU,
-    src: 'completeTransactionAfterThrowing() → rollback(conn#43) → cleanup → resume(suspended)' },
-  { t: 'order()의 catch가 예외를 잡음', d: '예외가 order()까지 <b>올라왔기 때문에</b> catch가 잡을 수 있습니다. "예외 전파가 안 된다"면 이 catch는 아무것도 못 잡아요.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  catch → log.warn', 'catch', '잡음')], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 done-rb')], held: ['a'], db: DBU },
-  { t: '바깥 프록시: 예외 없음 + 🚩 없음 → conn#42.commit() ✅', d: '<b>①② commit.</b> 결론은 내 답과 같지만 이유는 "예외가 안 와서"가 아니라 <b>"트랜잭션이 분리돼 있어서 안쪽 롤백이 바깥에 영향을 안 줘서"</b>입니다.',
-    stack: [TOM, F('OrderService 프록시 → commit', 'px1')], locker: '', shelf: null, phys: [P1('COMMIT', 'done-ok'), P2('ROLLBACK', 'p2 done-rb')], held: [], db: { s: '<b class="ok">9 확정</b>', o: '<b class="ok">1건 확정</b>' } },
-]);
+function hl(line) {
+  let code = line, cmt = '';
+  const ci = line.indexOf('//');
+  if (ci >= 0) { code = line.slice(0, ci); cmt = line.slice(ci); }
+  const h = esc(code).replace(/("[^"]*")|(@\w+(?:\([^)]*\))?)|\b(fun|class|val|private|try|catch|throw|return)\b|\b(\d+)\b/g,
+    (m, str, ann, kw, num) => `<span class="${str ? 'tk-s' : ann ? 'tk-a' : kw ? 'tk-k' : 'tk-n'}">${m}</span>`);
+  return h + (cmt ? `<span class="tk-c">${esc(cmt)}</span>` : '');
+}
 
-const REQ = base0.concat([
-  { t: 'use() 프록시 진입 → 사물함에 있음 → REQUIRED → 참여', d: '새 커넥션을 꺼내지 않습니다. 같은 conn#42, 같은 물리 트랜잭션에 <b>손님</b>으로 들어가요.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (손님)', 'px2')], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', ['l1', 'l2g'])], held: ['a'], db: DBU },
-  { t: '커넥션 추가 없음', d: '이 요청은 계속 <b>1개</b>만 쥡니다.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (손님)', 'px2'), F('use()', 'cur')], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', ['l1', 'l2g'])], held: ['a'], db: DBU },
-  { t: 'use()에서 💥', d: '',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (손님)', 'px2'), F('use()', 'boom', '💥')], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', ['l1', 'l2g'])], held: ['a'], db: DBU },
-  { t: '안쪽 프록시: 손님이라 rollback 못 함 → 공유 물리 #1에 🚩', d: '같은 물리 트랜잭션이라 깃발이 ①②까지 덮습니다. 예외는 위로 전파.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 → 🚩 · throw', 'boom', '💥↑')], locker: 'conn#42 🚩', shelf: null, phys: [P1('🚩 rollback-only', 'flag', ['l1', 'l2g'])], held: ['a'], db: DBU },
-  { t: 'order()의 catch가 잡음', d: '예외는 사라졌지만 깃발은 남아 있습니다.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  catch → log.warn', 'catch', '잡음')], locker: 'conn#42 🚩', shelf: null, phys: [P1('🚩 rollback-only', 'flag')], held: ['a'], db: DBU },
-  { t: '바깥 프록시: commit하려다 🚩 → 전체 rollback + UnexpectedRollbackException', d: '<b>①② rollback.</b> 같은 코드인데 전파 속성 하나로 결과가 정반대입니다.',
-    stack: [TOM, F('OrderService 프록시 → 🚩 rollback', 'boom', '500')], locker: '', shelf: null, phys: [P1('ROLLBACK', 'flag done-rb')], held: [], db: { s: '<b class="no">10 (취소)</b>', o: '<b class="no">없음 (취소)</b>' } },
-]);
+/* ── 프레임 ── */
+const CTRL = { fn: 'OrderController.order()', loc: 'OrderController.kt:20' };
+const OPX = l => ({ fn: 'OrderService$$Proxy.order()', loc: `TransactionInterceptor:${l}`, k: 'px1' });
+const ORD = l => ({ fn: 'OrderService.order()', loc: `OrderService.kt:${l}` });
+const PPX = l => ({ fn: 'PointService$$Proxy.use()', loc: `TransactionInterceptor:${l}`, k: 'px2' });
+const USE = l => ({ fn: 'PointService.use()', loc: `PointService.kt:${l}` });
 
-const NOCATCH = NEW.slice(0, 5).map(s => Object.assign({}, s, { stack: s.stack.map(f => f.t.startsWith('order()  try') ? F('order()  (catch 없음)') : f) })).concat([
-  { t: 'order()에 catch가 없음 → 예외가 계속 위로', d: '<b>예외는 전파됩니다.</b> order() 프레임을 지나 바깥 프록시까지 올라가요.',
-    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()', 'boom', '💥↑')], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 done-rb')], held: ['a'], db: DBU },
-  { t: '바깥 프록시가 예외를 받음 → conn#42.rollback() → ①②도 취소', d: 'REQUIRES_NEW여도 바깥이 예외를 못 잡으면 바깥도 롤백됩니다. <b>"REQUIRES_NEW라서 예외 전파가 안 된다"가 틀린 이유</b>가 바로 이 화면이에요.',
-    stack: [TOM, F('OrderService 프록시 → rollback', 'boom', '500')], locker: '', shelf: null, phys: [P1('ROLLBACK', 'done-rb'), P2('ROLLBACK', 'p2 done-rb')], held: [], db: { s: '<b class="no">10 (취소)</b>', o: '<b class="no">없음 (취소)</b>' } },
-]);
+/* ── 상태 ── */
+const S0 = { locker: null, shelf: null, phys: [], held: [], ex: null, stock: '10', orders: '0건', resp: '처리 중' };
+const P = (id, conn, st, who) => ({ id, conn, st, who });
 
-const MODES = { NEW, REQ, NOCATCH };
-let mode = 'NEW', i = 0;
-function renderTx(s) {
-  const lk = `<div class="locker"><div class="t">🔒 exec-7 사물함 (지금 바인딩된 것)</div>${s.locker ? `<span class="chip ${s.locker.includes('43') ? 'v' : ''}">${s.locker}</span>` : '<span class="dim" style="font-size:13px">{ } 비어 있음</span>'}</div>`;
-  const sh = `<div class="shelf ${s.shelf ? 'on' : ''}"><div class="t">⏸ 일시 중단 보관함 (suspend)</div>${s.shelf ? `<span class="chip">${s.shelf}</span><span style="font-size:12.5px">반납 안 됨 · 트랜잭션 유지</span>` : '<span class="dim" style="font-size:13px">비어 있음</span>'}</div>`;
-  const ph = s.phys.map(p => `<div class="phys ${p.cls}"><div class="h"><span>${p.name} · ${p.conn}</span><span class="st">${p.st}</span></div>${p.logic.map(l => `<div class="logic ${l.startsWith('l2') ? 'l2' : 'l1'}">${L[l]}</div>`).join('')}</div>`).join('');
-  return lk + sh + ph;
+function build(mode) {
+  const PX = 'TransactionInterceptor (프록시)', OF = 'OrderService.kt', PF = 'PointService.kt';
+  const files = {};
+  files[OF] = mode === 'NOCATCH' ? ORDER_NC : ORDER;
+  files[PF] = POINT(mode === 'REQ' ? '@Transactional                                   // 기본 = REQUIRED' : '@Transactional(propagation = Propagation.REQUIRES_NEW)');
+  files[PX] = PROXY;
+  const L3 = mode === 'NOCATCH' ? 11 : 12;
+  const INNER = mode === 'REQ' ? '안쪽 프록시 · PointService (REQUIRED)' : '안쪽 프록시 · PointService (REQUIRES_NEW)';
+  const OUTER = '바깥 프록시 · OrderService';
+  const steps = [];
+  const s = JSON.parse(JSON.stringify(S0));
+  const add = (o, f) => { if (f) f(s); steps.push(Object.assign({ log: [] }, o, { state: JSON.parse(JSON.stringify(s)) })); };
+
+  add({ file: PX, line: 3, who: OUTER, frames: [OPX(3), CTRL],
+    title: '바깥 프록시: getTransaction() → 사물함 비어 있음 → 새 트랜잭션',
+    d: '컨트롤러가 부른 건 진짜 OrderService가 아니라 <b>프록시</b>입니다. 사물함(ThreadLocal)이 비어 있으니 풀에서 <b>conn#42</b>를 꺼내 auto-commit을 끄고 사물함에 넣어요. 이 프록시가 <b>물리 #1의 주인</b>입니다.',
+    log: ['D|Creating new transaction with name [OrderService.order]: PROPAGATION_REQUIRED,ISOLATION_DEFAULT', 'D|Acquired Connection [conn#42] for JDBC transaction', 'D|Switching JDBC Connection [conn#42] to manual commit'] },
+    s => { s.locker = 'conn#42'; s.phys = [P(1, 'conn#42', '진행 중', 'order() 주인')]; s.held = ['conn#42']; });
+  add({ file: PX, line: 5, who: OUTER, frames: [OPX(5), CTRL], title: 'method.invoke() → 진짜 order()로 들어감', d: '프록시는 커넥션을 넘겨주지 않고 그냥 진짜 메서드를 부릅니다.' });
+  add({ file: OF, line: 9, frames: [ORD(9), OPX(5), CTRL], title: '① 재고 차감 — conn#42에서 UPDATE', d: '레포지토리가 사물함에서 conn#42를 꺼내 SQL을 보냅니다. 아직 <b>커밋 전</b>.',
+    log: ['S|UPDATE stock SET qty = qty - 1 WHERE id = ?   -- conn#42'] }, s => { s.stock = '9 (미확정)'; });
+  add({ file: OF, line: 10, frames: [ORD(10), OPX(5), CTRL], title: '② 주문 저장 — 같은 conn#42에서 INSERT', d: '①과 같은 물리 트랜잭션입니다.',
+    log: ['S|INSERT INTO orders (...) VALUES (...)   -- conn#42'] }, s => { s.orders = '1건 (미확정)'; });
+  add({ file: OF, line: L3, frames: [ORD(L3), OPX(5), CTRL], title: '③ pointService.use() 호출',
+    d: '<code>pointService</code>는 다른 빈이라, 진짜 PointService가 아니라 <b>PointService 프록시</b>로 들어갑니다. Step ▶' });
+
+  if (mode === 'REQ') {
+    add({ file: PX, line: 3, who: INNER, frames: [PPX(3), ORD(L3), OPX(5), CTRL],
+      title: '안쪽 프록시: getTransaction() → 사물함에 conn#42 있음 → REQUIRED → 참여',
+      d: '새 커넥션을 꺼내지 않습니다. 같은 conn#42, 같은 물리 #1에 <b>손님</b>으로 들어가요. 쥔 커넥션은 그대로 <b>1개</b>.',
+      log: ['D|Participating in existing transaction'] }, s => { s.phys[0].who = 'order() 주인 · use() 손님'; });
+  } else {
+    add({ file: PX, line: 3, who: INNER, frames: [PPX(3), ORD(L3), OPX(5), CTRL],
+      title: '⭐ 안쪽 프록시: REQUIRES_NEW → 바깥을 일시 중단(suspend) → 새 커넥션 conn#43',
+      d: 'conn#42를 사물함에서 빼서 <b>보관</b>합니다. <b>반납이 아니에요</b> — ①②가 아직 커밋 전이라 돌려줄 수 없습니다. 그리고 풀에서 <b>conn#43</b>을 새로 꺼내 물리 #2를 엽니다. 👉 Variables의 <b>쥔 커넥션 수 = 2</b>.',
+      log: ['D|Suspending current transaction, creating new transaction with name [PointService.use]', 'D|Acquired Connection [conn#43] for JDBC transaction', 'D|Switching JDBC Connection [conn#43] to manual commit'] },
+      s => { s.shelf = 'conn#42'; s.locker = 'conn#43'; s.phys[0].st = '일시 중단'; s.phys.push(P(2, 'conn#43', '진행 중', 'use() 주인')); s.held = ['conn#42', 'conn#43']; });
+  }
+  add({ file: PX, line: 5, who: INNER, frames: [PPX(5), ORD(L3), OPX(5), CTRL], title: 'method.invoke() → 진짜 use()로', d: '' });
+  add({ file: PF, line: 5, frames: [USE(5), PPX(5), ORD(L3), OPX(5), CTRL], exTop: true,
+    title: '💥 throw PointNotEnoughException',
+    d: '예외가 생겼습니다. 이제 예외는 <b>Frames를 아래 방향(호출한 쪽)으로</b> 거슬러 올라갑니다. 이게 <b>예외 전파</b> — 전파 속성과 무관하게 항상 일어나요.' },
+    s => { s.ex = { name: 'PointNotEnoughException', where: 'PointService.use() 에서 발생' }; });
+
+  if (mode === 'REQ') {
+    add({ file: PX, line: 9, who: INNER, frames: [PPX(9), ORD(L3), OPX(5), CTRL], exTop: true,
+      title: '안쪽 프록시 catch → rollback(tx) → 손님이라 🚩 표시만',
+      d: '이 프록시는 주인이 아니라서 conn#42에 진짜 rollback을 못 합니다. 대신 공유 트랜잭션에 <b class="no">rollback-only 🚩</b>를 꽂아요. 같은 물리 트랜잭션이라 ①②까지 덮습니다.',
+      log: ['D|Participating transaction failed - marking existing transaction as rollback-only', 'D|Setting JDBC transaction [conn#42] rollback-only'] },
+      s => { s.phys[0].st = '🚩 rollback-only'; s.ex.where = '안쪽 프록시 catch'; });
+  } else {
+    add({ file: PX, line: 9, who: INNER, frames: [PPX(9), ORD(L3), OPX(5), CTRL], exTop: true,
+      title: '⭐ 안쪽 프록시 catch → 주인이니 conn#43만 진짜 rollback → 반납 → conn#42 복원',
+      d: '물리 #2만 롤백됩니다. 물리 #1에는 <b>아무 표시도 없어요</b> (REQUIRED와의 차이). conn#43은 풀로 반납, 보관해 둔 conn#42는 사물함으로 돌아옵니다(resume). 쥔 커넥션 다시 <b>1개</b>.',
+      log: ['D|Initiating transaction rollback', 'D|Rolling back JDBC transaction on Connection [conn#43]', 'D|Releasing JDBC Connection [conn#43] after transaction', 'D|Resuming suspended transaction after completion of inner transaction'] },
+      s => { s.phys[1].st = 'ROLLBACK · 반납'; s.phys[0].st = '진행 중'; s.locker = 'conn#42'; s.shelf = null; s.held = ['conn#42']; s.ex.where = '안쪽 프록시 catch'; });
+  }
+  add({ file: PX, line: 10, who: INNER, frames: [PPX(10), ORD(L3), OPX(5), CTRL], exTop: true,
+    title: 'throw e — 예외를 그대로 호출한 쪽(order())으로 다시 던짐',
+    d: mode === 'REQ' ? '깃발은 남기고, 예외는 위로.' : '<b>"REQUIRES_NEW라서 예외 전파가 안 된다"가 틀린 지점</b>이 바로 이 줄입니다. 안쪽 프록시는 자기 트랜잭션만 정리하고 예외는 <b>그대로 위로</b> 던져요.' },
+    s => { s.ex.where = '→ OrderService.order()로 전파 중'; });
+
+  if (mode === 'NOCATCH') {
+    add({ file: OF, line: 11, frames: [ORD(11), OPX(5), CTRL], exTop: true, title: 'order()에 catch가 없음 → 예외가 order() 프레임을 그냥 통과',
+      d: '잡는 사람이 없으니 예외는 계속 위로, 바깥 프록시까지 올라갑니다.' }, s => { s.ex.where = '→ 바깥 프록시로 전파 중'; });
+    add({ file: PX, line: 9, who: OUTER, frames: [OPX(9), CTRL], exTop: true,
+      title: '바깥 프록시 catch → 주인이니 conn#42 rollback',
+      d: 'REQUIRES_NEW여도 바깥이 예외를 못 잡으면 <b>①②도 롤백</b>됩니다. 예외가 전파된다는 증거예요.',
+      log: ['D|Initiating transaction rollback', 'D|Rolling back JDBC transaction on Connection [conn#42]', 'D|Releasing JDBC Connection [conn#42] after transaction'] },
+      s => { s.phys[0].st = 'ROLLBACK · 반납'; s.locker = null; s.held = []; s.stock = '10 (취소)'; s.orders = '0건 (취소)'; s.ex.where = '바깥 프록시 catch'; });
+    add({ file: PX, line: 10, who: OUTER, frames: [OPX(10), CTRL], exTop: true, title: 'throw e → 컨트롤러 → 500', d: '',
+      log: ['E|PointNotEnoughException: 포인트 부족'] }, s => { s.ex.where = '→ 컨트롤러 (500)'; s.resp = '500'; });
+    return { files, steps };
+  }
+  add({ file: OF, line: 13, frames: [ORD(13), OPX(5), CTRL], title: 'catch (e: PointNotEnoughException) — 잡힘',
+    d: '예외가 order()까지 <b>올라왔기 때문에</b> 잡을 수 있습니다.' }, s => { s.ex.where = 'order()의 catch가 잡음'; });
+  add({ file: OF, line: 14, frames: [ORD(14), OPX(5), CTRL], title: 'log.warn → order() 정상 종료',
+    d: '예외는 사라졌습니다.' + (mode === 'REQ' ? ' <b>하지만 🚩는 Variables에 그대로 남아 있어요.</b>' : ''),
+    log: ['W|포인트 부족, 주문은 진행'] }, s => { s.ex = null; });
+  if (mode === 'REQ') {
+    add({ file: PX, line: 6, who: OUTER, frames: [OPX(6), CTRL], exTop: true,
+      title: '바깥 프록시: commit(tx) → 🚩 발견 → rollback + UnexpectedRollbackException',
+      d: '주인은 commit하려 했지만 rollback-only 표시 때문에 <b>전체 롤백</b>. 예상 못 한 롤백이라 예외로 알려 <b>500</b>.',
+      log: ['D|Global transaction is marked as rollback-only but transactional code requested commit', 'D|Initiating transaction rollback', 'D|Rolling back JDBC transaction on Connection [conn#42]', 'D|Releasing JDBC Connection [conn#42] after transaction', 'E|UnexpectedRollbackException: Transaction silently rolled back because it has been marked as rollback-only'] },
+      s => { s.phys[0].st = 'ROLLBACK · 반납'; s.locker = null; s.held = []; s.stock = '10 (취소)'; s.orders = '0건 (취소)'; s.ex = { name: 'UnexpectedRollbackException', where: '바깥 프록시 commit에서 발생 → 500' }; s.resp = '500'; });
+  } else {
+    add({ file: PX, line: 6, who: OUTER, frames: [OPX(6), CTRL],
+      title: '바깥 프록시: commit(tx) → 🚩 없음 → conn#42 commit ✅',
+      d: '<b>①② commit.</b> 이유는 "예외가 안 와서"가 아니라 <b>트랜잭션이 분리돼 있어 안쪽 롤백이 물리 #1에 흔적을 안 남겨서</b>입니다.',
+      log: ['D|Initiating transaction commit', 'D|Committing JDBC transaction on Connection [conn#42]', 'D|Releasing JDBC Connection [conn#42] after transaction'] },
+      s => { s.phys[0].st = 'COMMIT · 반납'; s.locker = null; s.held = []; s.stock = '9 ✅ 확정'; s.orders = '1건 ✅ 확정'; s.resp = '200'; });
+  }
+  return { files, steps };
+}
+
+let mode = 'NEW', i = 0, view = null, B = build(mode);
+function stChip(st) { const c = /ROLLBACK|🚩/.test(st) ? 'r' : /중단/.test(st) ? 'd' : /COMMIT/.test(st) ? '' : 'v'; return `<span class="chip ${c}">${st}</span>`; }
+function varsHtml(s, prev) {
+  const row = (ic, k, v, keys) => `<div class="vr ${prev && keys.some(key => JSON.stringify(prev[key]) !== JSON.stringify(s[key])) ? 'chg' : ''}"><span>${ic}</span><span class="vk">${k}</span><span class="vv">${v}</span></div>`;
+  return row('🔌', '쥔 커넥션 수', `<span class="big" style="color:${s.held.length >= 2 ? 'var(--no)' : s.held.length ? 'var(--ok)' : 'var(--dim)'}">${s.held.length}</span> ${s.held.map(c => `<span class="chip ${c === 'conn#43' ? 'v' : ''}">${c}</span>`).join('')}`, ['held'])
+    + row('🔒', 'ThreadLocal 사물함', s.locker ? `{ DataSource → <span class="chip ${s.locker === 'conn#43' ? 'v' : ''}">${s.locker}</span> }` : '<span class="dim">{ } 비어 있음</span>', ['locker'])
+    + row('⏸', '일시 중단 보관', s.shelf ? `<span class="chip">${s.shelf}</span> <span class="dim">반납 아님</span>` : '<span class="dim">없음</span>', ['shelf'])
+    + row('🔀', '물리 트랜잭션', s.phys.length ? s.phys.map(p => `<span class="txline">#${p.id} ${p.conn} ${stChip(p.st)}<span class="dim"> ${p.who}</span></span>`).join('') : '<span class="dim">없음</span>', ['phys'])
+    + row('💥', '날아가는 예외', s.ex ? `<span class="no">${s.ex.name}</span><br><span class="dim">${s.ex.where}</span>` : '<span class="dim">없음</span>', ['ex'])
+    + row('🗄', 'DB stock / orders', `${s.stock} · ${s.orders}`, ['stock', 'orders'])
+    + row('📨', '응답', s.resp === '500' ? '<span class="no">500</span>' : s.resp === '200' ? '<span class="ok">200</span>' : '<span class="dim">처리 중</span>', ['resp']);
 }
 function render() {
-  const all = MODES[mode], s = all[i];
-  $('stk').innerHTML = '<div class="lt">위가 최신 · 예외는 아래 방향(호출한 쪽)으로 전파</div>' + s.stack.slice().reverse().map(f => `<div class="frame ${f.c}">${f.t}${f.ex ? `<span class="ex">${f.ex}</span>` : ''}</div>`).join('');
-  $('tx').innerHTML = renderTx(s);
-  $('held').textContent = s.held.length;
-  $('held').style.color = s.held.length >= 2 ? 'var(--no)' : s.held.length ? 'var(--ok)' : 'var(--dim)';
-  const slots = ['#42', '#43', '#44', '#45'];
-  $('pool').innerHTML = slots.map((n, k) => `<div class="slot ${k === 0 && s.held.includes('a') ? 'a' : k === 1 && s.held.includes('b') ? 'b' : ''}">${n}</div>`).join('');
-  $('db').innerHTML = `<div class="r"><span>① 재고</span><span>${s.db.s}</span></div><div class="r"><span>② 주문</span><span>${s.db.o}</span></div>`;
-  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${all.length}</div><div class="title">${s.t}</div><div>${s.d}</div>` + (s.src ? `<div class="src">스프링 코드: ${s.src}</div>` : '');
-  $('prev').disabled = i === 0; $('next').disabled = i === all.length - 1;
-  $('dots').innerHTML = all.map((_, k) => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
-  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+  const st = B.steps[i], prev = i ? B.steps[i - 1].state : null, s = st.state;
+  const f = view || st.file;
+  $('ftabs').innerHTML = Object.keys(B.files).map(n => `<div class="ftab ${n === f ? 'on' : ''} ${n === st.file ? 'here' : ''}" data-f="${n}">${n}</div>`).join('');
+  document.querySelectorAll('.ftab').forEach(t => t.onclick = () => { view = t.dataset.f; render(); });
+  $('who').innerHTML = f === st.file ? (st.who ? `▶ 지금 이 코드를 실행하는 것: <b>${st.who}</b>` : '▶ 실행 중') : '<span class="dim">다른 파일 보는 중 — ● 표시된 탭이 현재 실행 위치</span>';
+  $('code').innerHTML = B.files[f].split('\n').map((ln, k) => {
+    const cur = f === st.file && k + 1 === st.line;
+    return `<div class="ln ${cur ? 'cur' : ''} ${cur && st.exTop ? 'ex' : ''}"><span class="g">${cur ? (st.exTop ? '⚡' : '▶') : ''}</span><span class="no2">${k + 1}</span><span>${hl(ln)}</span></div>`;
+  }).join('');
+  $('frames').innerHTML = st.frames.map((fr, k) => `<div class="fr ${k === 0 ? 'top' : ''} ${fr.k || ''} ${k === 0 && st.exTop ? 'exf' : ''}"><span class="fn">${fr.fn}</span><span class="loc">${fr.loc}</span></div>`).join('');
+  $('vars').innerHTML = varsHtml(s, prev);
+  const logs = [];
+  B.steps.slice(0, i + 1).forEach((x, k) => x.log.forEach(l => logs.push([l, k === i])));
+  const lvName = { D: 'DEBUG', S: 'SQL  ', W: 'WARN ', E: 'ERROR' }, lvCls = { D: '', S: 'sql', W: 'cw', E: 'err' };
+  $('clog').innerHTML = logs.length ? logs.map(([l, nw]) => `<div class="${lvCls[l[0]]} ${nw ? 'new' : ''}"><span class="lv">${lvName[l[0]]}</span> ${esc(l.slice(2))}</div>`).join('') : '<div>(아직 로그 없음)</div>';
+  $('clog').scrollTop = $('clog').scrollHeight;
+  $('narr').innerHTML = `<div class="title">${st.title}</div><div class="d">${st.d || ''}</div>`;
+  $('counter').textContent = `${i + 1} / ${B.steps.length}`;
+  $('prev').disabled = $('first').disabled = i === 0;
+  $('next').disabled = i === B.steps.length - 1;
 }
+const go = k => { i = Math.max(0, Math.min(B.steps.length - 1, k)); view = null; render(); };
 document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
-  mode = b.dataset.m; i = Math.min(i, MODES[mode].length - 1);
-  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); render();
+  mode = b.dataset.m; B = build(mode);
+  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b));
+  go(i);
 });
-$('next').onclick = () => { i++; render(); };
-$('prev').onclick = () => { i--; render(); };
+$('next').onclick = () => go(i + 1);
+$('prev').onclick = () => go(i - 1);
+$('first').onclick = () => go(0);
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
-  if (e.key === 'ArrowRight' && i < MODES[mode].length - 1) { i++; render(); }
-  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+  if (e.key === 'ArrowRight') go(i + 1);
+  if (e.key === 'ArrowLeft') go(i - 1);
 });
 render();
 
