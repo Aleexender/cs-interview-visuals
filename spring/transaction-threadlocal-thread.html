@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@Transactional · ThreadLocal · 스레드 · 예외 전파</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.65 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .sub { color: var(--dim); margin-bottom: 28px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 19px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center;
+            border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13.5px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13.5px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .warn { border-left: 4px solid var(--no); background: #2c1a1e; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .dim { color: var(--dim); } .blue { color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+
+  /* 객체 구조 */
+  .objmap { display: grid; grid-template-columns: 1fr 40px 1.2fr 40px 1fr; align-items: center; gap: 0; }
+  .obj { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; }
+  .obj .t { font-weight: 700; margin-bottom: 6px; }
+  .obj .f { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--dim); }
+  .obj.proxy { border-color: var(--violet); border-style: dashed; }
+  .obj.real { border-color: var(--blue); }
+  .beans { display: grid; gap: 8px; }
+  .bean { border: 2px solid var(--cyan); border-radius: 10px; padding: 8px 12px; background: #132326; font-size: 13.5px; }
+  .harrow { text-align: center; color: var(--dim); font-size: 22px; }
+
+  /* 사물함 */
+  .threads { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .thread { border: 2px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .thread .head { padding: 8px 14px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; }
+  .thread.exec .head { background: #1b2a40; color: var(--blue); }
+  .thread.worker .head { background: #2a2140; color: var(--violet); }
+  .thread .body { padding: 12px 14px; display: grid; gap: 10px; }
+  .locker { border: 2px solid var(--mid); border-radius: 10px; padding: 10px 12px; background: #221e12; }
+  .locker .lt { font-size: 12px; color: var(--mid); margin-bottom: 4px; }
+  .conn { display: inline-block; padding: 2px 10px; border-radius: 99px; background: #183a2b; color: var(--ok); font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .conn.new { background: #3a1a22; color: var(--no); }
+  .empty { color: var(--dim); font-style: italic; }
+  .stack { border: 2px solid var(--line); border-radius: 10px; padding: 8px; background: #141a21; display: flex; flex-direction: column-reverse; gap: 4px; }
+  .stack .lt { font-size: 12px; color: var(--dim); order: 99; margin-bottom: 2px; }
+  .frame { padding: 5px 10px; border-radius: 6px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .frame.boom { background: #3a1a22; color: var(--no); font-weight: 700; }
+  .frame.px { background: #2a2140; color: var(--violet); }
+  .heap { margin-top: 16px; border: 2px solid var(--cyan); border-radius: 12px; padding: 12px 14px; background: #132326; text-align: center; }
+  .heap .lt { color: var(--cyan); font-weight: 700; }
+
+  /* 시나리오 */
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab { padding: 8px 14px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; font: inherit; font-size: 14px; }
+  .tab.on { border-color: var(--blue); background: #1b2a40; }
+  .scen { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .scen { grid-template-columns: 1fr; } }
+  .steps { display: grid; gap: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .steps div { padding: 7px 10px; border-radius: 7px; background: #141a21; border-left: 4px solid var(--line); }
+  .steps .e { border-color: var(--blue); } .steps .w { border-color: var(--violet); margin-left: 24px; }
+  .steps .x { border-color: var(--no); } .steps .c { border-color: var(--ok); }
+  .db { border: 2px solid var(--line); border-radius: 12px; padding: 14px; background: #141a21; }
+  .db h3 { margin: 0 0 10px; font-size: 15px; }
+  .dbrow { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+  .verdict { margin-top: 12px; font-weight: 700; font-size: 16px; }
+
+  /* 층 */
+  .layers { display: grid; gap: 6px; }
+  .layer { display: grid; grid-template-columns: 130px 1fr 1fr; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; background: #141a21; }
+  .layer .ln { font-weight: 700; }
+  .layer.hl1 { outline: 2px solid var(--blue); }
+  .layer.hl2 { outline: 2px solid var(--violet); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12.5px; margin: 2px 4px 2px 0; background: #252d38; }
+</style>
+</head>
+<body>
+<main>
+  <h1>@Transactional · ThreadLocal · 스레드 · 예외 전파</h1>
+  <div class="sub">2026-10-14 모의면접 꼬리질문 5~7을 그림으로 정리했습니다. 출발 코드는 계속 같아요.</div>
+
+  <section>
+<pre><code>@Transactional
+fun order(userId: Long, productId: Long) {
+    stockRepository.decrease(productId)   // ① UPDATE
+    orderRepository.save(Order(...))      // ② INSERT
+    pointService.use(userId, 1000)        // ③ 예외
+}</code></pre>
+  </section>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">1</span>프록시 안에 레포지토리가 있나? → 없다</h2>
+    <div class="objmap">
+      <div class="obj proxy">
+        <div class="t" style="color:var(--violet)">OrderService 프록시</div>
+        <div class="f">target ─────►</div>
+        <div class="f">트랜잭션 시작/종료 로직</div>
+      </div>
+      <div class="harrow">►</div>
+      <div class="obj real">
+        <div class="t" style="color:var(--blue)">진짜 OrderService</div>
+        <div class="f">stockRepository ──►</div>
+        <div class="f">orderRepository ──►</div>
+        <div class="f">pointService ─────►</div>
+        <div class="f" style="margin-top:6px;color:var(--text)">fun order() { ① ② ③ }</div>
+      </div>
+      <div class="harrow">►</div>
+      <div class="beans">
+        <div class="bean">StockRepository 빈</div>
+        <div class="bean">OrderRepository 빈</div>
+        <div class="bean">PointService 빈</div>
+      </div>
+    </div>
+    <div class="key">프록시가 가진 건 <b>진짜 객체를 가리키는 참조 하나</b>뿐입니다. 레포지토리는 <b>진짜 OrderService의 필드</b>예요.<br>
+    프록시는 레포지토리를 직접 부르지 않고, 커넥션을 건네주지도 않습니다. → 그럼 레포지토리는 프록시가 꺼낸 커넥션을 <b>어떻게 찾을까?</b></div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">2</span>답: 스레드마다 하나씩 있는 사물함(ThreadLocal)</h2>
+    <p>톰캣은 <b>요청 하나를 스레드 하나</b>에 맡깁니다. ①②③은 <b>같은 스레드</b>가 위에서부터 차례로 실행해요. 그래서 그 스레드 전용 사물함에 커넥션을 넣어 두면 누구든 꺼내 쓸 수 있습니다.</p>
+<pre><code><span class="dim">[스레드 http-nio-8080-exec-7]</span>
+
+<span style="color:var(--violet)">프록시</span>  풀에서 <span class="ok">conn#42</span> 꺼냄 → setAutoCommit(false) → <span class="mid">사물함에 넣음 { DataSource → conn#42 }</span>
+                                                                   ▲
+① stockRepository   ── 사물함 열어 봄 ── "트랜잭션 커넥션 있나?" ──────┤ → <span class="ok">conn#42</span>
+② orderRepository   ── 사물함 열어 봄 ──────────────────────────────┘ → <span class="ok">conn#42</span>
+③ pointService      → 💥 예외
+
+<span style="color:var(--violet)">프록시</span>  <span class="ok">conn#42</span>.rollback() → 사물함 비움 → 풀에 반납</code></pre>
+    <table>
+      <tr><th>무엇</th><th>정체</th></tr>
+      <tr><td>사물함</td><td>스프링 <code>TransactionSynchronizationManager</code>의 <code>ThreadLocal&lt;Map&gt; resources</code></td></tr>
+      <tr><td>열쇠</td><td><code>DataSource</code> (DB가 여러 개여도 구분하려고)</td></tr>
+      <tr><td>꺼내는 쪽</td><td>JDBC/jOOQ: <code>DataSourceUtils.getConnection()</code> · JPA: 주입된 <code>EntityManager</code> 프록시</td></tr>
+    </table>
+    <div class="say">면접용: <b>"스프링은 트랜잭션을 시작할 때 커넥션을 ThreadLocal에 바인딩하고, 같은 스레드의 레포지토리들은 거기서 같은 커넥션을 꺼내 씁니다."</b></div>
+  </section>
+
+  <!-- 3 시나리오 -->
+  <section>
+    <h2><span class="num">3</span>시나리오 비교: ③에서 예외가 나면 DB에 뭐가 남나?</h2>
+    <p>버튼을 눌러 보세요.</p>
+    <div class="tabs">
+      <button class="tab on" data-s="share">A. 사물함으로 공유 (정상)</button>
+      <button class="tab" data-s="noshare">B. 레포지토리가 각자 새 커넥션</button>
+      <button class="tab" data-s="async">C. ③만 다른 스레드(runAsync)</button>
+    </div>
+    <div class="scen">
+      <div class="steps" id="steps"></div>
+      <div class="db">
+        <h3>DB 최종 상태</h3>
+        <div class="dbrow"><span>① 재고</span><span id="r1"></span></div>
+        <div class="dbrow"><span>② 주문</span><span id="r2"></span></div>
+        <div class="dbrow"><span>③ 포인트</span><span id="r3"></span></div>
+        <div class="verdict" id="vd"></div>
+        <div id="why" style="margin-top:6px;font-size:14px"></div>
+      </div>
+    </div>
+    <div class="key"><b>핵심 두 줄</b><br>
+    · <b>트랜잭션은 커넥션 단위</b>입니다. <code>commit()</code>·<code>rollback()</code>은 <code>Connection</code>의 메서드라서, 자기 커넥션에서 실행된 것만 되돌립니다.<br>
+    · auto-commit이 켜진 새 커넥션은 <b>SQL 한 문장이 끝나는 즉시</b> 커밋됩니다. "트랜잭션이 끝나고"가 아니에요.</div>
+  </section>
+
+  <!-- 4 exec vs worker -->
+  <section>
+    <h2><span class="num">4</span>exec-7과 worker-3은 뭐가 다른가? → 소속 풀만 다르다</h2>
+    <table>
+      <tr><th></th><th class="blue">exec-7</th><th style="color:var(--violet)">worker-3</th></tr>
+      <tr><td>로그에 찍히는 이름</td><td><code>http-nio-8080-exec-7</code></td><td><code>ForkJoinPool.commonPool-worker-3</code></td></tr>
+      <tr><td>소속 풀</td><td>톰캣 요청 처리 풀</td><td>JDK 공용 ForkJoinPool</td></tr>
+      <tr><td>누가 일을 맡기나</td><td>HTTP 요청이 오면 톰캣이</td><td><code>runAsync { }</code> (실행기 미지정 시 기본값)</td></tr>
+      <tr><td>종류</td><td colspan="2" style="text-align:center"><b>둘 다 똑같은 <code>java.lang.Thread</code> · 같은 층(JVM)</b></td></tr>
+    </table>
+    <div class="key">"exec이라서 / worker라서" 다른 게 아니라 <b>"다른 스레드라서"</b> 다릅니다. 같은 톰캣 풀의 exec-7과 exec-8도 사물함은 따로예요.<br>
+    실무 팁: 로그 패턴에 <code>%thread</code>를 넣고, 트랜잭션이 이상할 때 <b>스레드 이름이 중간에 바뀌는지</b>부터 보세요.</div>
+  </section>
+
+  <!-- 5 공유 vs 따로 -->
+  <section>
+    <h2><span class="num">5</span>스레드끼리 "서로의 정보를 모른다"? → 힙은 공유, 스택과 사물함은 따로</h2>
+    <div class="threads">
+      <div class="thread exec">
+        <div class="head">http-nio-8080-exec-7</div>
+        <div class="body">
+          <div class="locker"><div class="lt">🔒 사물함 (ThreadLocal)</div><span class="conn">conn#42</span></div>
+          <div class="stack">
+            <div class="lt">📚 호출 스택 (아래 → 위로 쌓임)</div>
+            <div class="frame">톰캣 → 컨트롤러</div>
+            <div class="frame px">프록시 try { … } catch → rollback / 정상 → commit</div>
+            <div class="frame">order()  ① ② runAsync 등록 → <span class="ok">정상 반환</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="thread worker">
+        <div class="head">ForkJoinPool.commonPool-worker-3</div>
+        <div class="body">
+          <div class="locker"><div class="lt">🔒 사물함 (ThreadLocal)</div><span class="empty">비어 있음 → 풀에서 새로</span> <span class="conn new">conn#45</span></div>
+          <div class="stack">
+            <div class="lt">📚 호출 스택</div>
+            <div class="frame">ForkJoinPool 실행 루프</div>
+            <div class="frame">runAsync 블록</div>
+            <div class="frame boom">pointRepository.use() 💥 예외 → 이 스택에서만 위로 → Future 안에 담김</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="heap"><div class="lt">🧱 힙 (모든 스레드가 공유)</div>
+      <span class="tag">StockRepository 빈</span><span class="tag">OrderRepository 빈</span><span class="tag">PointRepository 빈</span><span class="tag">싱글톤 객체들</span><span class="tag">static 필드</span>
+      <div class="dim" style="font-size:13px;margin-top:4px">08-18: 힙을 공유하기 때문에 경쟁 조건이 생겼다</div>
+    </div>
+    <table style="margin-top:16px">
+      <tr><th>질문</th><th>모르는 것</th><th>이유 (어느 칸)</th></tr>
+      <tr><td>Q6. worker-3이 conn#42를 찾나?</td><td>worker-3은 exec-7의 <b>커넥션</b>을 모름</td><td>커넥션은 <b>사물함(ThreadLocal)</b>에 있음 → 스레드마다 따로</td></tr>
+      <tr><td>Q7. 프록시가 worker-3의 예외를 아나?</td><td>exec-7의 프록시는 worker-3의 <b>예외</b>를 모름</td><td>예외는 <b>호출 스택</b>을 따라 올라감 → 스레드마다 따로</td></tr>
+    </table>
+    <div class="warn">❌ "서로의 정보를 모른다" → 너무 넓어서 틀린 문장. 같은 <code>pointRepository</code> 객체(힙)는 함께 씁니다.<br>
+    ✅ "<b>호출 스택과 ThreadLocal은 스레드마다 따로</b>라서 모른다"</div>
+  </section>
+
+  <!-- 6 예외 전파 -->
+  <section>
+    <h2><span class="num">6</span>프록시는 무엇을 보고 commit/rollback을 정하나</h2>
+<pre><code><span class="dim">// 프록시 내부 (단순화)</span>
+try {
+    target.order(...)     <span class="mid">// ← exec-7의 이 호출에서 예외가 튀어나오나? 이것만 본다</span>
+    commit()
+} catch (e: RuntimeException) {
+    rollback()
+}</code></pre>
+    <div class="two" style="margin-top:14px">
+      <div class="obj" style="border-color:var(--ok)"><div class="t ok">같은 스레드에서 예외</div>③ 💥 → order() 스택을 타고 위로 → 프록시 catch에 도착 → <b>rollback</b></div>
+      <div class="obj" style="border-color:var(--no)"><div class="t no">다른 스레드(worker-3)에서 예외</div>worker-3 스택에서만 올라가 Future에 담김 → exec-7의 order()는 <b>정상 반환</b> → 프록시 <b>commit</b></div>
+    </div>
+    <div class="warn">Q7에서 쓴 근거 "서로 다른 커넥션이라서" ❌ → <b>커넥션은 JDBC 층, 예외 전파는 JVM 호출 스택 층.</b><br>
+    반례: worker-3이 같은 conn#42를 썼다 해도 예외는 exec-7로 안 올라오니 프록시는 똑같이 commit합니다 → 커넥션은 근거가 아님.</div>
+    <div class="say">면접용: <b>"예외는 발생한 스레드의 호출 스택으로만 전파됩니다. 다른 스레드의 예외는 기다리지 않는 한 트랜잭션 프록시에 도달하지 못해서 원래 트랜잭션은 커밋됩니다."</b></div>
+  </section>
+
+  <!-- 7 층 -->
+  <section>
+    <h2><span class="num">7</span>"층이 다르다"는 뭐가 다르다는 건가</h2>
+    <p>스레드끼리 층이 다른 게 아닙니다. <b>질문이 묻는 층</b>과 <b>답에 쓴 근거의 층</b>이 어긋났다는 뜻이에요. 테두리가 있는 두 층이 Q7의 질문과 근거입니다.</p>
+    <div class="layers">
+      <div class="layer"><span class="ln">DB</span><span><span class="tag">트랜잭션</span><span class="tag">undo log</span><span class="tag">MVCC</span><span class="tag">락</span></span><span class="dim">"값이 보이나?"</span></div>
+      <div class="layer hl2"><span class="ln" style="color:var(--violet)">JDBC·프레임워크</span><span><span class="tag">커넥션</span><span class="tag">커넥션 풀</span><span class="tag">@Transactional 프록시</span></span><span class="dim">"같은 커넥션을 쓰나?" ← <b class="no">Q7 내 근거</b></span></div>
+      <div class="layer hl1"><span class="ln blue">JVM</span><span><span class="tag">스레드</span><span class="tag">호출 스택</span><span class="tag">예외 전파</span><span class="tag">ThreadLocal</span><span class="tag">힙</span></span><span class="dim">"알 수 있나 / 전달되나?" ← <b class="ok">Q7 질문</b></span></div>
+      <div class="layer"><span class="ln">OS</span><span><span class="tag">프로세스</span><span class="tag">커널 스레드</span><span class="tag">소켓</span></span><span></span></div>
+      <div class="layer"><span class="ln">하드웨어</span><span><span class="tag">CPU 코어</span><span class="tag">메모리</span></span><span></span></div>
+    </div>
+    <div class="key"><b>답하기 전 체크: 질문의 동사</b><br>
+    "알 수 있나 / 전달되나" → 호출 스택(JVM) · "같은 커넥션을 쓰나" → JDBC · "값이 보이나" → MVCC(DB)</div>
+  </section>
+
+  <section>
+    <h2><span class="num">8</span>다음 질문 (아직 안 풂)</h2>
+<pre><code>class PointNotEnoughException : Exception("포인트 부족")   // RuntimeException이 아니라 Exception 상속
+
+@Transactional
+fun order(userId: Long, productId: Long) {
+    stockRepository.decrease(productId)   // ①
+    orderRepository.save(Order(...))      // ②
+    pointService.use(userId, 1000)        // ③ → PointNotEnoughException
+}</code></pre>
+    <p>스레드는 exec-7 하나, 예외는 프록시의 try/catch까지 <b>정상 전파</b>됐습니다. <b>①·②는 rollback일까 commit일까?</b> 6번의 프록시 코드를 잘 보세요.</p>
+    <p class="dim">근거: <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/TransactionSynchronizationManager.java">TransactionSynchronizationManager</a> ·
+    <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-jdbc/src/main/java/org/springframework/jdbc/datasource/DataSourceUtils.java">DataSourceUtils</a> ·
+    <a style="color:var(--blue)" href="https://docs.oracle.com/en/java/javase/17/docs/api/java.sql/java.sql.Connection.html#setAutoCommit(boolean)">JDBC setAutoCommit</a> ·
+    <a style="color:var(--blue)" href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CompletableFuture.html">CompletableFuture</a></p>
+  </section>
+</main>
+
+<script>
+  const S = {
+    share: {
+      steps: [
+        ['e', '프록시: conn#42 꺼냄 · autoCommit=false · 사물함에 넣음'],
+        ['e', '① stockRepo → 사물함에서 conn#42 → UPDATE (아직 커밋 X)'],
+        ['e', '② orderRepo → 사물함에서 conn#42 → INSERT (아직 커밋 X)'],
+        ['x', '③ 💥 예외 → order() 스택 타고 프록시 catch 도착'],
+        ['e', '프록시: conn#42.rollback() → ①② 모두 undo'],
+      ],
+      r: ['10 (원래대로)', '없음', '그대로'], cls: ['ok','ok','ok'],
+      vd: ['ok', '✅ 아무것도 안 남음'],
+      why: '①②③이 전부 같은 커넥션 conn#42 위에서 실행됐으므로 rollback 한 번으로 전부 되돌아갑니다.'
+    },
+    noshare: {
+      steps: [
+        ['e', '프록시: conn#42 꺼냄 · autoCommit=false (SQL 실행 없음)'],
+        ['x', '① stockRepo → 풀에서 새 conn#43 (autoCommit=true) → UPDATE → 즉시 커밋'],
+        ['x', '② orderRepo → 풀에서 새 conn#44 (autoCommit=true) → INSERT → 즉시 커밋'],
+        ['x', '③ 💥 예외 → 프록시 catch 도착'],
+        ['e', '프록시: conn#42.rollback() → 되돌릴 게 없음 (빈 껍데기)'],
+      ],
+      r: ['9 (줄어듦)', '1건 생김', '그대로'], cls: ['no','no','ok'],
+      vd: ['no', '❌ 재고·주문이 그대로 남음'],
+      why: 'rollback()은 자기 커넥션에서 실행된 것만 되돌립니다. ①②는 다른 커넥션에서 이미 커밋됐어요. @Transactional을 아예 안 붙였을 때와 같은 결과입니다.'
+    },
+    async: {
+      steps: [
+        ['e', '[exec-7] 프록시: conn#42 · autoCommit=false · exec-7 사물함에 넣음'],
+        ['e', '[exec-7] ① ② → 사물함에서 conn#42 → UPDATE · INSERT'],
+        ['e', '[exec-7] runAsync { ③ } 등록만 하고 order() 정상 반환'],
+        ['c', '[exec-7] 프록시: 예외 없음 → conn#42.commit() → ①② 확정'],
+        ['w', '[worker-3] 사물함 비어 있음 → 새 conn#45 (autoCommit=true)'],
+        ['w', '[worker-3] ③ 💥 예외 → worker-3 스택에서만 올라감 → Future에 담김'],
+      ],
+      r: ['9 (줄어듦)', '1건 생김', '그대로 (③ 실패)'], cls: ['no','no','ok'],
+      vd: ['no', '❌ 포인트는 안 빠졌는데 주문은 커밋됨'],
+      why: 'worker-3의 예외는 exec-7의 호출 스택으로 올라오지 않으므로 프록시는 모르고 commit합니다. exec-7이 commit할 때 worker-3은 아직 시작도 안 했을 수 있어요.'
+    }
+  };
+  function show(k) {
+    const s = S[k];
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.s === k));
+    document.getElementById('steps').innerHTML = s.steps.map(([c, t]) => `<div class="${c}">${t}</div>`).join('');
+    ['r1','r2','r3'].forEach((id, i) => { const el = document.getElementById(id); el.textContent = s.r[i]; el.className = s.cls[i]; });
+    const vd = document.getElementById('vd'); vd.textContent = s.vd[1]; vd.className = 'verdict ' + s.vd[0];
+    document.getElementById('why').textContent = s.why;
+  }
+  document.querySelectorAll('.tab').forEach(t => t.onclick = () => show(t.dataset.s));
+  show('share');
+</script>
+</body>
+</html>

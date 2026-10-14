@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>트랜잭션 · undo log · MVCC 그림 설명</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.65 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .sub { color: var(--dim); margin-bottom: 28px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+            padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 19px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center;
+            border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13.5px; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .warn { border-left: 4px solid var(--no); background: #2c1a1e; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .dim { color: var(--dim); }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .box { border: 2px solid var(--line); border-radius: 10px; padding: 10px 14px; background: #141a21; min-width: 150px; }
+  .box .t { font-size: 12px; color: var(--dim); }
+  .box.blue { border-color: var(--blue); } .box.violet { border-color: var(--violet); }
+  .box.ok { border-color: var(--ok); } .box.no { border-color: var(--no); }
+  .arrow { color: var(--dim); font-size: 20px; }
+
+  /* 1. 프록시 흐름 */
+  .flow { display: grid; grid-template-columns: 1fr; gap: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; }
+  .flow div { padding: 7px 12px; border-radius: 7px; background: #141a21; border-left: 4px solid var(--line); }
+  .flow .p { border-color: var(--blue); }
+  .flow .r { border-color: var(--violet); margin-left: 28px; }
+  .flow .e { border-color: var(--no); margin-left: 28px; }
+  .flow .rb { border-color: var(--no); }
+
+  /* 2. undo 순서 */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .step { background: #141a21; border-radius: 10px; padding: 12px; border-top: 4px solid var(--blue); }
+  .step b { display: block; margin-bottom: 4px; }
+
+  /* 3. 버전 체인 */
+  .chain { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .ver { border: 2px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 170px; background: #141a21; }
+  .ver .loc { font-size: 12px; color: var(--dim); }
+  .ver .val { font-size: 22px; font-weight: 700; }
+  .ver .stamp { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 99px; background: #252d38; font-size: 12.5px; }
+  .ptr { align-self: center; padding: 0 8px; color: var(--violet); font-size: 13px; text-align: center; }
+
+  /* 4. 번호줄 */
+  .tickets { display: flex; gap: 4px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .tk { width: 54px; text-align: center; padding: 8px 0; border-radius: 8px; font-weight: 700;
+        cursor: pointer; border: 2px solid transparent; transition: transform .1s; user-select: none; }
+  .tk:hover { transform: translateY(-2px); }
+  .tk small { display: block; font-weight: 400; font-size: 11px; opacity: .85; }
+  .z1 { background: #183a2b; } .z2 { background: #3a3218; } .z3 { background: #3a1a22; }
+  .tk.inlist { outline: 2px dashed var(--no); outline-offset: -4px; }
+  .tk.sel { border-color: #fff; }
+  .zones { display: grid; grid-template-columns: 2fr 5fr 3fr; gap: 4px; font-size: 13px; text-align: center; }
+  .zones div { padding: 6px; border-radius: 6px; }
+  .verdict { margin-top: 14px; padding: 14px; border-radius: 10px; background: #141a21; border: 1px solid var(--line); min-height: 80px; }
+  .verdict .big { font-size: 20px; font-weight: 700; }
+  .snap { font-family: ui-monospace, Menlo, monospace; background: #141a21; border: 2px solid var(--blue); border-radius: 10px; padding: 10px 14px; display: inline-block; }
+
+  /* 5. 판정 흐름도 */
+  .decide { display: grid; gap: 8px; }
+  .q { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; background: #141a21; padding: 9px 12px; border-radius: 8px; }
+  .q .n { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 13px; }
+  .pill { padding: 2px 10px; border-radius: 99px; font-size: 13px; font-weight: 700; }
+  .pill.ok { background: #183a2b; } .pill.no { background: #3a1a22; } .pill.mid { background: #3a3218; }
+
+  /* 6. 타임라인 */
+  .tl { position: relative; height: 150px; margin: 16px 0 6px; }
+  .tl .axis { position: absolute; left: 0; right: 0; top: 74px; height: 2px; background: var(--line); }
+  .tl .cam { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--blue); }
+  .tl .cam span { position: absolute; top: -2px; left: 6px; color: var(--blue); font-size: 13px; white-space: nowrap; }
+  .bar { position: absolute; height: 26px; border-radius: 6px; font-size: 12.5px; padding: 3px 8px; white-space: nowrap; }
+  .bar .s, .bar .c { position: absolute; top: 28px; font-size: 11.5px; color: var(--dim); }
+  .bar .s { left: 0; } .bar .c { right: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .two, .steps { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>트랜잭션 · undo log · MVCC</h1>
+  <div class="sub">2026-10-12 모의면접에서 다룬 내용을 그림으로 정리했습니다. MySQL InnoDB와 Spring <code>@Transactional</code> 기준입니다.</div>
+
+  <!-- 0. 문제 -->
+  <section>
+    <h2><span class="num">0</span>출발점: ③에서 예외가 나면 DB에는 무엇이 남나?</h2>
+<pre style="margin:0;background:#141a21;padding:12px 14px;border-radius:10px;font-size:13.5px"><code style="background:none;padding:0">@Transactional
+fun order(userId: Long, productId: Long) {
+    stockRepository.decrease(productId)   // ① UPDATE
+    orderRepository.save(Order(...))      // ② INSERT
+    pointService.use(userId, 1000)        // ③ 예외!
+}</code></pre>
+    <div class="key"><b>답: 아무것도 남지 않습니다.</b> 이걸 보장하는 성질은 ACID 중 <b>Atomicity(원자성)</b>입니다. 전부 반영되거나 전부 반영되지 않아요.<br>
+    그런데 "원자성 때문"은 이름일 뿐입니다. <b>실제로 누가 무엇을 하는지</b>를 아래에서 차례로 봅니다.</div>
+  </section>
+
+  <!-- 1. 스프링 -->
+  <section>
+    <h2><span class="num">1</span>스프링 쪽: "트랜잭션 시작" = auto-commit 끄기</h2>
+    <div class="flow">
+      <div class="p">프록시.order() 호출됨</div>
+      <div class="p">① 커넥션 풀에서 커넥션 1개 획득</div>
+      <div class="p">② <b>connection.setAutoCommit(false)</b> &nbsp;← 이게 "트랜잭션 시작"</div>
+      <div class="p">③ 진짜 order() 호출</div>
+      <div class="r">UPDATE stock … &nbsp;<span class="dim">(실행됐지만 아직 커밋 안 됨)</span></div>
+      <div class="r">INSERT orders … &nbsp;<span class="dim">(실행됐지만 아직 커밋 안 됨)</span></div>
+      <div class="e">pointService.use() → 예외!</div>
+      <div class="rb">④ 예외 감지 → <b>connection.rollback()</b> &nbsp;<span class="dim">(정상이었다면 commit())</span></div>
+      <div class="p">⑤ auto-commit 원래대로 복구 → 커넥션 풀에 반납</div>
+    </div>
+    <div class="two" style="margin-top:16px">
+      <div class="box ok"><div class="t">auto-commit을 껐을 때 (@Transactional)</div>
+        ①②③이 <b>트랜잭션 하나</b>로 묶임<br>③ 예외 → rollback → <span class="ok">①② 모두 취소</span></div>
+      <div class="box no"><div class="t">auto-commit 그대로 (기본값)</div>
+        SQL 한 문장마다 <b>즉시 커밋</b><br>③ 예외 → <span class="no">재고 줄고 주문은 생겼는데 포인트는 그대로</span></div>
+    </div>
+  </section>
+
+  <!-- 2. undo log -->
+  <section>
+    <h2><span class="num">2</span>DB 쪽: rollback은 어떻게 원래 값을 아나? → undo log</h2>
+    <div class="steps">
+      <div class="step"><b>1. 먼저 기록</b>행을 고치기 <b>직전에</b> 바뀌기 전 값(<code>qty=10</code>)을 undo log에 적는다</div>
+      <div class="step"><b>2. 그다음 수정</b>행의 값을 <code>qty=9</code>로 바꾼다</div>
+      <div class="step" style="border-color:var(--no)"><b>3. 롤백하면</b>undo 기록을 <b>역순</b>으로 적용한다. ② INSERT 취소 → ① 값 10으로 복구</div>
+    </div>
+    <div class="warn">순서가 반대면(수정하고 나서 기록) 그 사이에 장애가 났을 때 원래 값을 잃어버립니다. 그래서 <b>"먼저 기록, 나중에 수정"</b>입니다.</div>
+  </section>
+
+  <!-- 3. 버전 체인 -->
+  <section>
+    <h2><span class="num">3</span>행 안의 숨은 컬럼 두 개 + undo log = 버전 체인</h2>
+    <p>각 행에는 숨은 컬럼이 두 개 있습니다. <b>undo log 자체가 아니라</b>, undo log를 가리키는 정보예요.</p>
+    <table>
+      <tr><th>이름</th><th>위치</th><th>내용</th></tr>
+      <tr><td><code>DB_TRX_ID</code></td><td>행 안</td><td>이 버전을 만든 트랜잭션 번호, 즉 <b>도장</b></td></tr>
+      <tr><td><code>DB_ROLL_PTR</code></td><td>행 안</td><td>이전 버전이 있는 undo 레코드를 가리키는 <b>포인터</b></td></tr>
+      <tr><td>undo log</td><td>행 밖</td><td>이전 버전의 값</td></tr>
+    </table>
+    <div class="chain" style="margin-top:16px">
+      <div class="ver" style="border-color:var(--blue)"><div class="loc">테이블의 행 (최신)</div><div class="val">qty = 8</div><span class="stamp">도장 103</span></div>
+      <div class="ptr">ROLL_PTR<br>──►</div>
+      <div class="ver"><div class="loc">undo log (한 칸 과거)</div><div class="val">qty = 9</div><span class="stamp">도장 100</span></div>
+      <div class="ptr">ROLL_PTR<br>──►</div>
+      <div class="ver"><div class="loc">undo log (두 칸 과거)</div><div class="val">qty = 10</div><span class="stamp">도장 90</span></div>
+    </div>
+    <div class="key">테이블에는 <b>최신 값 하나</b>만 있습니다. 옛날 값들은 undo log에 Ctrl+Z 이력처럼 줄줄이 연결돼 있어요.<br>
+    값 <code>8</code>에는 "커밋됨" 표시가 <b>없습니다.</b> 있는 건 <b>누가 썼는지(도장)</b>뿐이에요.</div>
+  </section>
+
+  <!-- 4. Read View + 인터랙티브 -->
+  <section>
+    <h2><span class="num">4</span>Read View(사진): 값이 아니라 "작업 중인 사람 명단"</h2>
+    <p>B가 첫 일반 <code>SELECT</code>를 하는 순간 찍는 사진입니다. <b>데이터를 복사하지 않습니다.</b> 어떤 버전을 고를지 정하는 <b>기준표</b>예요.</p>
+    <div class="snap">
+      📸 B의 Read View<br>
+      명단(사진 순간 커밋 안 한 번호) : <span class="no">[100, 103]</span><br>
+      가장 작은 명단 번호&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: 100<br>
+      다음 발급 번호&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: 105 &nbsp;<span class="dim">(이 이상은 사진 뒤에 온 사람)</span>
+    </div>
+    <p style="margin-top:16px"><b>번호표를 눌러 보세요.</b> B가 그 도장이 찍힌 버전을 볼 수 있는지 판정합니다. 점선 테두리는 명단에 있는 번호예요.</p>
+    <div class="tickets" id="tickets"></div>
+    <div class="zones">
+      <div class="z1">① ~99 : 사진 전에 다 끝남</div>
+      <div class="z2">② 100~104 : 섞여 있음 → 명단 확인</div>
+      <div class="z3">③ 105~ : 사진 뒤에 옴</div>
+    </div>
+    <div class="verdict" id="verdict"><span class="dim">번호를 선택하면 여기에 판정 과정이 나옵니다.</span></div>
+  </section>
+
+  <!-- 5. 판정 순서 -->
+  <section>
+    <h2><span class="num">5</span>B가 SELECT 할 때 판정하는 순서</h2>
+    <div class="decide">
+      <div class="q"><span class="n">0</span><span>행의 <b>최신 버전</b>을 꺼내 도장을 본다</span><span></span></div>
+      <div class="q"><span class="n">a</span><span>도장이 <b>내 번호</b>인가? (내가 고친 것)</span><span class="pill ok">보임</span></div>
+      <div class="q"><span class="n">b</span><span>도장 &lt; <b>가장 작은 명단 번호</b>(100)인가? → ①</span><span class="pill ok">보임</span></div>
+      <div class="q"><span class="n">c</span><span>도장 ≥ <b>다음 발급 번호</b>(105)인가? → ③</span><span class="pill no">안 보임</span></div>
+      <div class="q"><span class="n">d</span><span>그 사이(②)면 <b>명단에 있나?</b></span><span><span class="pill no">있음 → 안 보임</span> <span class="pill ok">없음 → 보임</span></span></div>
+      <div class="q" style="border:1px dashed var(--violet)"><span class="n">↺</span><span><b>안 보이면</b> ROLL_PTR을 따라 한 칸 과거 버전을 만들어 a부터 다시. 체인 끝까지 없으면 <b>그 행은 B에게 존재하지 않음</b></span><span></span></div>
+    </div>
+    <div class="key">이 과정에 <b>락 확인은 한 번도 없습니다.</b> 그래서 일반 SELECT는 쓰는 트랜잭션을 기다리지 않아요(consistent nonlocking read).<br>
+    "복원"은 B만 보는 <b>복사본</b>입니다. 실제 행은 그대로 8이에요.</div>
+    <p><b>"보인다"</b> = 그 버전의 값이 B의 SELECT <b>결과로 나온다</b>는 뜻입니다.</p>
+    <table>
+      <tr><th>상대가 한 일</th><th>"안 보인다"면 B의 결과는</th></tr>
+      <tr><td>UPDATE</td><td>바뀌기 <b>전 값</b>이 나온다</td></tr>
+      <tr><td>INSERT</td><td>그 행이 결과에 <b>아예 없다</b></td></tr>
+      <tr><td>DELETE</td><td>지워진 행이 <b>아직 나온다</b></td></tr>
+    </table>
+  </section>
+
+  <!-- 6. 시작 vs 커밋 -->
+  <section>
+    <h2><span class="num">6</span>가장 헷갈린 지점: "지금 커밋됐나"는 판정에 쓰이지 않는다</h2>
+    <p>오늘 세 번 흔들린 곳입니다. 기준은 언제나 <b>사진 찍은 순간</b>이에요.</p>
+    <div class="tl">
+      <div class="axis"></div>
+      <div class="cam" style="left:44%"><span>📸 B 사진</span></div>
+      <div class="bar" style="left:2%;width:24%;top:22px;background:#183a2b">102 <span class="s">시작</span><span class="c">커밋</span></div>
+      <div class="bar" style="left:14%;width:58%;top:88px;background:#3a3218">103 (사진 때 작업 중) <span class="s">시작</span><span class="c">"방금" 커밋</span></div>
+      <div class="bar" style="left:56%;width:34%;top:22px;background:#3a1a22">D = 106 <span class="s">시작</span><span class="c">커밋</span></div>
+    </div>
+    <table>
+      <tr><th>번호</th><th>시작</th><th>커밋</th><th>구간</th><th>B에게</th><th>근거</th></tr>
+      <tr><td>102</td><td>사진 전</td><td>사진 전</td><td>②</td><td class="ok">보임</td><td>명단에 없음</td></tr>
+      <tr><td>103</td><td>사진 전</td><td><b>사진 후</b></td><td>②</td><td class="no">안 보임</td><td><b>명단에 있음</b>. 지금 커밋됐어도 사진은 그대로</td></tr>
+      <tr><td>106</td><td><b>사진 후</b></td><td>사진 후</td><td>③</td><td class="no">안 보임</td><td><b>번호 ≥ 105</b>. "미래"는 이 경우만 가리킴</td></tr>
+    </table>
+    <div class="warn">"이미 커밋했으니 과거" ❌ → 오늘 D(106)와 103에서 두 번 이렇게 판정했습니다.<br>
+    정확한 규칙: <b>"사진을 찍은 시점 이전에 커밋된 버전과 내가 바꾼 버전만 보인다."</b></div>
+  </section>
+
+  <!-- 7. 왜 사진 고정 -->
+  <section>
+    <h2><span class="num">7</span>왜 행에 "커밋됨" 표시를 안 붙이고 사진을 따로 둘까?</h2>
+    <p>같은 버전이라도 <b>읽는 사람마다 답이 다르기</b> 때문입니다.</p>
+    <div class="tl" style="height:90px">
+      <div class="axis" style="top:50px"></div>
+      <div class="cam" style="left:18%"><span>📸 C 사진</span></div>
+      <div class="cam" style="left:50%;background:var(--mid)"><span style="color:var(--mid)">103 커밋</span></div>
+      <div class="cam" style="left:80%"><span>📸 E 사진</span></div>
+    </div>
+    <div class="two">
+      <div class="box no"><div class="t">C (103 커밋 전 사진)</div>103이 쓴 qty=8 → <b>안 보임</b> → 옛날 값</div>
+      <div class="box ok"><div class="t">E (103 커밋 후 사진)</div>103이 쓴 qty=8 → <b>보임</b> → 8</div>
+    </div>
+    <div class="key">그래서 역할을 나눕니다. <b>행</b>은 누가 썼는지(번호)만 기록하고, <b>읽는 사람</b>은 각자 사진을 갖고, 둘을 <b>대조</b>합니다. 명단에 번호가 들어 있는 이유도 <b>행에 찍힌 게 번호라서</b>예요.<br>
+    이게 Multi-Version Concurrency Control이라는 이름의 뜻입니다.</div>
+    <h3 style="font-size:16px;margin-top:20px">사진을 고정하면 얻는 것: 일관성</h3>
+    <table>
+      <tr><th>B: 잔액 합계 리포트</th><th>사진 고정 (RR)</th><th>매번 새로 커밋된 걸 봄</th></tr>
+      <tr><td>X 읽음</td><td>1000</td><td>1000</td></tr>
+      <tr><td class="dim">← 103: X −100, Y +100 커밋</td><td></td><td></td></tr>
+      <tr><td>Y 읽음</td><td>500 (이체 전)</td><td>600 (이체 후)</td></tr>
+      <tr><td><b>합계</b></td><td class="ok"><b>1500 ✅</b></td><td class="no"><b>1600 ❌ 100원 생김</b></td></tr>
+    </table>
+  </section>
+
+  <!-- 8. RR vs RC -->
+  <section>
+    <h2><span class="num">8</span>REPEATABLE READ vs READ COMMITTED = 사진을 언제 찍나</h2>
+    <table>
+      <tr><th>격리 수준</th><th>사진을 찍는 시점</th><th>A가 커밋한 뒤 다시 읽으면</th></tr>
+      <tr><td><b>REPEATABLE READ</b> (MySQL 기본)</td><td>트랜잭션의 <b>첫 일반 읽기</b>에서 한 번</td><td>계속 10 → <span class="ok">반복 읽기 보장</span>, 새 INSERT 행도 안 보임</td></tr>
+      <tr><td><b>READ COMMITTED</b></td><td><b>매 SELECT마다</b> 새로</td><td>9가 보임 → non-repeatable read</td></tr>
+    </table>
+    <div class="warn">dirty read는 RR이라서가 아니라 <b>READ COMMITTED부터</b> 막힙니다.<br>
+    긴 트랜잭션이 위험한 이유: 오래된 사진이 옛 버전을 필요로 하니 <b>undo log를 지우지 못하고 계속 쌓입니다.</b></div>
+  </section>
+
+  <!-- 9. 면접 문장 -->
+  <section>
+    <h2><span class="num">9</span>면접용 문장 (평서형으로 끊기)</h2>
+    <ol>
+      <li><code>@Transactional</code>의 트랜잭션 시작은 커넥션의 auto-commit을 끄는 것이고, 끝날 때 결과에 따라 commit 또는 rollback을 호출하는 것입니다.</li>
+      <li>원자성은 undo log로 보장됩니다. 행을 바꾸기 전에 이전 값을 기록해 두고, 롤백 시 역순으로 되돌립니다.</li>
+      <li>일반 SELECT는 락 없이 Read View 기준으로 보이는 버전을 고르고, 보이지 않으면 undo log 체인을 따라 이전 버전을 만들어 읽습니다.</li>
+      <li>일반 SELECT는 스냅샷 시점 이전에 커밋된 버전과 자기 자신이 바꾼 버전만 봅니다.</li>
+    </ol>
+    <p class="dim">근거: <a style="color:var(--blue)" href="https://dev.mysql.com/doc/refman/8.0/en/innodb-consistent-read.html">MySQL — Consistent Nonlocking Reads</a> ·
+    <a style="color:var(--blue)" href="https://dev.mysql.com/doc/refman/8.0/en/innodb-multi-versioning.html">InnoDB Multi-Versioning</a> ·
+    <a style="color:var(--blue)" href="https://dev.mysql.com/doc/refman/8.0/en/innodb-undo-logs.html">Undo Logs</a> ·
+    <a style="color:var(--blue)" href="https://docs.oracle.com/en/java/javase/17/docs/api/java.sql/java.sql.Connection.html#setAutoCommit(boolean)">JDBC Connection.setAutoCommit</a></p>
+  </section>
+</main>
+
+<script>
+  const LIST = [100, 103], MIN = 100, NEXT = 105;
+  const nowState = {98:'커밋됨',99:'커밋됨',100:'작업 중',101:'커밋됨',102:'커밋됨',103:'방금 커밋됨',104:'커밋됨',105:'커밋됨',106:'커밋됨 (D, id=2 INSERT)',107:'작업 중'};
+  const wrap = document.getElementById('tickets'), out = document.getElementById('verdict');
+  for (let id = 98; id <= 107; id++) {
+    const el = document.createElement('div');
+    const zone = id < MIN ? 'z1' : id >= NEXT ? 'z3' : 'z2';
+    el.className = 'tk ' + zone + (LIST.includes(id) ? ' inlist' : '');
+    el.innerHTML = id + '<small>' + (nowState[id].startsWith('작업') ? '작업 중' : nowState[id].startsWith('방금') ? '방금 커밋' : '커밋됨') + '</small>';
+    el.onclick = () => {
+      document.querySelectorAll('.tk').forEach(t => t.classList.remove('sel'));
+      el.classList.add('sel');
+      const steps = [];
+      let res, why;
+      steps.push(`b. ${id} &lt; 100 ? → ${id < MIN ? '<b>예</b>' : '아니오'}`);
+      if (id < MIN) { res = true; why = '① 사진 전에 이미 끝난 사람입니다. 명단을 볼 필요도 없어요.'; }
+      else {
+        steps.push(`c. ${id} ≥ 105 ? → ${id >= NEXT ? '<b>예</b>' : '아니오'}`);
+        if (id >= NEXT) { res = false; why = '③ 사진 찍을 때 번호표도 안 뽑은 사람입니다. 지금 커밋했든 안 했든 상관없어요.'; }
+        else {
+          const inL = LIST.includes(id);
+          steps.push(`d. 명단 [100, 103]에 ${id}가 있나? → ${inL ? '<b>있음</b>' : '<b>없음</b>'}`);
+          res = !inL;
+          why = inL ? '② 사진 찍을 때 작업 중이었습니다. 그 뒤에 커밋했어도 사진은 바뀌지 않아요.' : '② 사진 전에 커밋을 끝낸 사람입니다.';
+        }
+      }
+      out.innerHTML =
+        `<div class="dim">도장 ${id} · 지금 상태: ${nowState[id]} <i>(판정에는 안 쓰임)</i></div>` +
+        `<div style="margin:8px 0;font-family:ui-monospace,Menlo,monospace;font-size:13.5px">${steps.join('<br>')}</div>` +
+        `<div class="big ${res ? 'ok' : 'no'}">${res ? '✅ 보임 → 이 버전의 값이 SELECT 결과로 나옴' : '❌ 안 보임 → ROLL_PTR 따라 한 칸 과거로'}</div>` +
+        `<div style="margin-top:4px">${why}</div>`;
+    };
+    wrap.appendChild(el);
+  }
+</script>
+</body>
+</html>
