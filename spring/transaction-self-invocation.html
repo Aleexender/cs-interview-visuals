@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>self-invocation: 같은 클래스에서 부르면 @Transactional이 무시되는 이유</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13px; overflow-x: auto; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .vi { color: var(--violet); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; font-size: 14px; }
+  .card.no { border-color: var(--no); } .card.ok { border-color: var(--ok); }
+  .card .t { font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .bad { border-left: 4px solid var(--no); background: #2c1a1e; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  button { font: inherit; padding: 8px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  button:disabled { opacity: .4; cursor: default; }
+
+  /* 객체 구조 */
+  .objs { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .scene { border: 2px solid var(--line); border-radius: 14px; padding: 14px; background: #141a21; }
+  .scene h3 { margin: 0 0 10px; font-size: 15px; }
+  .proxy { border: 2px dashed var(--violet); border-radius: 14px; padding: 10px; background: #1a1626; }
+  .proxy > .pt { color: var(--violet); font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+  .real { border: 2px solid var(--blue); border-radius: 12px; padding: 10px; background: #13202f; }
+  .real > .pt { color: var(--blue); font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+  .m { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; padding: 5px 9px; border-radius: 7px; background: #252d38; margin: 4px 0; }
+  .m.hot { outline: 2px solid var(--mid); }
+  .arrow { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; margin: 6px 0; }
+  .gate { font-size: 12.5px; padding: 4px 9px; border-radius: 7px; background: #2a2140; color: var(--violet); margin: 4px 0; }
+
+  /* 코드 포인터 */
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .modes button.on { border-color: var(--mid); background: #2a2416; }
+  .walk { display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 18px; }
+  .lane-t { font-size: 12.5px; color: var(--dim); margin-bottom: 6px; font-weight: 700; }
+  .lane-t b { color: var(--text); }
+  .who { padding: 7px 12px; border-radius: 10px 10px 0 0; font-size: 13px; background: #1a1810; color: var(--mid); border: 1px solid var(--line); border-bottom: none; min-height: 34px; }
+  .who b { color: var(--text); }
+  .codebox { background: #0d1116; border: 1px solid var(--line); border-radius: 0 0 10px 10px; padding: 8px 0; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.85; overflow-x: auto; }
+  .ln { display: grid; grid-template-columns: 40px 26px 1fr; white-space: pre; }
+  .ln .g { text-align: center; font-size: 12px; }
+  .ln .g .pt { display: inline-block; padding: 0 6px; border-radius: 99px; background: var(--blue); color: #0f1419; font-weight: 800; }
+  .ln .n { color: #4a5563; text-align: right; padding-right: 10px; user-select: none; }
+  .ln.cur { background: #1b2a40; }
+  .ln.cur.ex { background: #3a1a22; } .ln.cur.ex .g .pt { background: var(--no); }
+  .ln.cur.px { background: #2a2140; } .ln.cur.px .g .pt { background: var(--violet); }
+  .ln.skip { background: repeating-linear-gradient(45deg, #2c1a1e, #2c1a1e 6px, #1a1013 6px, #1a1013 12px); }
+  .ln.skip .g { color: var(--no); font-weight: 800; }
+  .ln.seen .n { color: #6e7a87; }
+  .tk-k { color: #ff7b72; } .tk-a { color: var(--violet); } .tk-s { color: #a5d6ff; } .tk-c { color: #6e7a87; } .tk-n { color: #79c0ff; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--dim); margin-top: 8px; }
+  .legend span b { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  .right { display: grid; gap: 12px; align-content: start; }
+  .stack { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: #11161c; display: flex; flex-direction: column; gap: 4px; min-height: 120px; }
+  .frame { padding: 5px 10px; border-radius: 7px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 12px; position: relative; }
+  .frame.px1 { background: #1b2a40; color: var(--blue); }
+  .frame.px2 { background: #2a2140; color: var(--violet); }
+  .frame.cur { outline: 2px solid var(--blue); }
+  .frame.boom { outline: 2px solid var(--no); background: #3a1a22; color: var(--no); font-weight: 700; }
+  .frame.catch { outline: 2px solid var(--mid); background: #2a2416; color: var(--mid); }
+  .frame .ex { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; padding: 0 7px; border-radius: 99px; background: var(--no); color: #0f1419; font-weight: 700; }
+  .pass { border: 2px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #141a21; font-size: 13.5px; }
+  .pass.y { border-color: var(--violet); } .pass.n { border-color: var(--no); background: #2c1a1e; }
+  .tx { display: grid; gap: 8px; }
+  .tx2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .locker { border: 2px solid var(--mid); border-radius: 10px; padding: 8px 10px; background: #221e12; font-size: 13px; }
+  .locker .t, .shelf .t { font-weight: 700; font-size: 12.5px; margin-bottom: 2px; }
+  .locker .t { color: var(--mid); }
+  .shelf { border: 2px dashed var(--line); border-radius: 10px; padding: 8px 10px; background: #141a21; font-size: 13px; }
+  .shelf.on { border-color: var(--violet); background: #1f1a2c; } .shelf .t { color: var(--violet); }
+  .phys { border: 2px solid var(--ok); border-radius: 10px; padding: 7px 10px; background: #11201a; font-size: 13px; }
+  .phys .h { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
+  .phys .h .st { font-size: 12px; padding: 0 8px; border-radius: 99px; background: #0f1419; font-weight: 600; white-space: nowrap; }
+  .phys.p2 { border-color: var(--violet); background: #1f1a2c; }
+  .phys.susp, .phys.rb { opacity: .6; border-style: dashed; }
+  .phys .who2 { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .chip { display: inline-block; padding: 0 8px; border-radius: 99px; background: #183a2b; color: var(--ok); font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin: 1px 4px 1px 0; }
+  .chip.v { background: #2a2140; color: var(--violet); }
+  .bottomrow { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+  .meter { border: 2px solid var(--line); border-radius: 10px; padding: 8px; background: #141a21; text-align: center; }
+  .meter .n { font-size: 34px; font-weight: 800; line-height: 1.1; }
+  .meter .l { font-size: 11.5px; color: var(--dim); }
+  .db { border: 2px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #141a21; font-size: 13px; }
+  .db .r { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed var(--line); }
+  .db .r:last-child { border-bottom: none; }
+  .chg { box-shadow: 0 0 0 2px var(--mid); }
+  .ctrl { display: flex; gap: 10px; align-items: center; margin: 16px 0 12px; flex-wrap: wrap; }
+  .dots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dot { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; cursor: pointer; }
+  .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
+  .narr { border: 1px solid var(--line); border-radius: 12px; background: #141a21; padding: 14px 16px; min-height: 110px; }
+  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .narr .title { font-size: 17px; font-weight: 700; margin: 2px 0 6px; }
+  @media (max-width: 960px) { .two, .objs, .walk { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>self-invocation: 같은 클래스에서 부르면 @Transactional이 무시되는 이유</h1>
+  <div class="sub">2026-10-15 모의면접 꼬리질문 11 · "어노테이션이 붙어 있다 ≠ 적용된다"</div>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">1</span>질문 · 내 답 · 판정</h2>
+<pre><code>@Service
+class OrderService(...) {
+    <span class="vi">@Transactional</span>
+    fun order(userId: Long, productId: Long) {
+        stockRepository.decrease(productId)   <span class="dim">// ①</span>
+        orderRepository.save(Order(...))      <span class="dim">// ②</span>
+        try { use(userId, 1000) }             <span class="dim">// ③ 같은 클래스의 메서드 (= this.use())</span>
+        catch (e: PointNotEnoughException) { log.warn("포인트 부족") }
+    }
+
+    <span class="vi">@Transactional(propagation = Propagation.REQUIRES_NEW)</span>
+    fun use(userId: Long, amount: Int) { throw PointNotEnoughException() }
+}</code></pre>
+    <p style="margin:12px 0 6px"><b>Q1.</b> REQUIRES_NEW가 적용되나? 이유는? &nbsp; <b>Q2.</b> 커넥션은 몇 개? ①②는 commit되나?</p>
+    <div class="two">
+      <div class="card no"><div class="t">내 답변 (원문)</div>"1. 적용 되지. 왜냐하면 propagation.requires_new를 작성했으니까<br>2. 2개"
+        <div style="margin-top:8px" class="no">❌ 둘 다 오답 (깊이 0). 1번 근거는 <b>순환논법</b>(썼으니까 적용된다), 2번은 근거 없음 + ①② 질문 미답</div></div>
+      <div class="card ok"><div class="t">정답</div>
+        1. <b>적용되지 않는다.</b> <code>use()</code>를 <code>this</code>로 불러서 <b>프록시를 거치지 않기</b> 때문. 어노테이션을 읽고 처리하는 건 프록시인데, 프록시가 끼어들 틈이 없다.<br>
+        2. 커넥션 <b>1개</b>. ①②는 <b>commit</b> — 하지만 "REQUIRES_NEW라서"가 아니라 "use()가 그냥 order()의 일부로 실행돼서".</div>
+    </div>
+    <div class="key">08-05 돌발 질문(self-invocation)에서 <b>0 → 2</b>로 올랐던 노드가 <b>다시 0</b>. 판별 습관: <code>@Transactional</code> · <code>@Async</code> · <code>@Cacheable</code>을 보면 <b>"이 호출이 프록시를 거치나?"</b>를 먼저 묻는다.</div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">2</span>왜 무시되나 — 객체 구조로 보기</h2>
+    <div class="objs">
+      <div class="scene" style="border-color:var(--ok)">
+        <h3 class="ok">✅ 다른 빈 호출: <code>pointService.use()</code></h3>
+        <div class="m">OrderService.order()</div>
+        <div class="arrow">│ <span class="dim">pointService 필드에 든 것 = <b class="vi">프록시</b></span><br>▼</div>
+        <div class="proxy"><div class="pt">PointService 프록시 (껍데기)</div>
+          <div class="gate">① @Transactional(REQUIRES_NEW) 읽음 → 바깥 일시 중단 · 새 커넥션</div>
+          <div class="real"><div class="pt">진짜 PointService</div><div class="m hot">use()</div></div>
+          <div class="gate">② 끝나면 commit / rollback · 바깥 복원</div>
+        </div>
+      </div>
+      <div class="scene" style="border-color:var(--no)">
+        <h3 class="no">❌ 같은 클래스 호출: <code>use()</code> = <code>this.use()</code></h3>
+        <div class="arrow dim">컨트롤러 → <span class="vi">OrderService 프록시</span> → 진짜 OrderService</div>
+        <div class="proxy"><div class="pt">OrderService 프록시 (껍데기)</div>
+          <div class="gate">order()의 @Transactional만 처리 → conn#42</div>
+          <div class="real"><div class="pt">진짜 OrderService  (= this)</div>
+            <div class="m">order()</div>
+            <div class="arrow">│ <span class="no">this.use() — 껍데기 <b>안쪽</b>에서 바로 호출</span><br>▼</div>
+            <div class="m hot">use()  <span class="no">← @Transactional(REQUIRES_NEW) 읽는 사람 없음</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="key">
+      <b>@Transactional은 어노테이션이 일하는 게 아니라 프록시가 일합니다.</b> 어노테이션은 "프록시야, 여기 오면 이렇게 해 줘"라는 메모일 뿐이에요.<br>
+      <code>this</code>는 프록시가 아니라 <b>진짜 객체 자신</b>이라, 진짜 객체 안에서 자기 메서드를 부르면 껍데기(프록시)를 다시 지날 일이 없습니다 → 메모를 읽을 사람이 없음.
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="num">3</span>단계별 비교 — 포인터로 따라가기</h2>
+    <div class="dim" style="font-size:14px;margin-bottom:12px">숫자 포인터 = 지금 실행 중인 줄. <span class="vi">보라 줄</span> = 그 어노테이션의 프록시가 일하는 중. <span class="no">빗금 줄</span> = <b>건너뛴 어노테이션</b>(프록시가 없어서 아무도 안 읽음). 노란 테두리 = 이번 단계에 바뀐 것. ← → 키.</div>
+    <div class="modes">
+      <button data-m="SELF" class="on">this.use() — self-invocation (질문 상황)</button>
+      <button data-m="SEP">pointService.use() — 다른 빈으로 분리 (의도한 동작)</button>
+    </div>
+    <div class="walk">
+      <div>
+        <div class="lane-t">💻 <b>코드</b> — use()에서 포인트를 먼저 차감하고 예외가 나는 경우</div>
+        <div class="who" id="who"></div>
+        <div class="codebox" id="code"></div>
+        <div class="legend">
+          <span><b style="background:#1b2a40"></b>내 코드</span>
+          <span><b style="background:#2a2140"></b>프록시 실행</span>
+          <span><b style="background:#3a1a22"></b>예외</span>
+          <span><b style="background:repeating-linear-gradient(45deg,#2c1a1e,#2c1a1e 3px,#1a1013 3px,#1a1013 6px)"></b>건너뛴 어노테이션</span>
+        </div>
+      </div>
+      <div class="right">
+        <div><div class="lane-t">🚪 <b>이번 호출, 프록시를 거쳤나?</b></div><div class="pass" id="pass"></div></div>
+        <div><div class="lane-t">📚 <b>호출 스택</b> (위가 최신)</div><div class="stack" id="stk"></div></div>
+        <div><div class="lane-t">🔀 <b>트랜잭션</b></div><div class="tx" id="tx"></div></div>
+        <div class="bottomrow">
+          <div class="meter" id="meterBox"><div class="l">쥔 커넥션</div><div class="n" id="held">0</div><div id="heldc"></div></div>
+          <div class="db" id="db"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ctrl">
+      <button id="prev">◀ 이전</button>
+      <button id="next" class="primary">다음 ▶</button>
+      <div class="dots" id="dots"></div>
+    </div>
+    <div class="narr" id="narr"></div>
+    <table style="margin-top:16px">
+      <tr><th></th><th class="no">this.use() (self-invocation)</th><th class="ok">pointService.use() (다른 빈)</th></tr>
+      <tr><td>use()의 @Transactional</td><td><b>무시됨</b> (프록시를 안 거침)</td><td>적용됨</td></tr>
+      <tr><td>물리 트랜잭션 / 커넥션</td><td>1개 / 1개 (conn#42 하나에 전부)</td><td>2개 / 2개 (바깥 일시 중단)</td></tr>
+      <tr><td>예외 시 use()의 포인트 차감</td><td class="no"><b>안 되돌려짐</b> → ①②와 함께 커밋</td><td class="ok">conn#43만 롤백 → 원래대로</td></tr>
+      <tr><td>①② 재고·주문</td><td>commit</td><td>commit</td></tr>
+      <tr><td>겉으로 보이는 결과</td><td colspan="2">둘 다 "주문 성공 + WARN 포인트 부족" → <b>로그만 봐선 구분 불가. 그래서 버그가 숨는다</b></td></tr>
+    </table>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <h2><span class="num">4</span>고치는 방법</h2>
+    <div class="two">
+      <div class="card ok"><div class="t">① 다른 빈으로 분리 (권장)</div>
+<pre><code>@Service
+class PointService {
+    @Transactional(propagation = REQUIRES_NEW)
+    fun use(...) { ... }
+}
+<span class="dim">// OrderService에서</span>
+pointService.use(userId, 1000)   <span class="dim">// 프록시 경유</span></code></pre>
+        트랜잭션 경계가 다르면 <b>책임도 다르다</b>는 신호. 구조로 해결.</div>
+      <div class="card"><div class="t">② TransactionTemplate (코드로 경계 지정)</div>
+<pre><code>private val newTx = TransactionTemplate(txManager).apply {
+    propagationBehavior = PROPAGATION_REQUIRES_NEW
+}
+fun use(...) = newTx.execute { ... }</code></pre>
+        프록시 없이 직접 트랜잭션을 연다. 같은 클래스에 둬야 할 때.</div>
+      <div class="card"><div class="t">③ 자기 자신의 프록시를 주입</div>
+<pre><code>class OrderService(
+    @Lazy private val self: OrderService,
+) { ... self.use(userId, 1000) ... }</code></pre>
+        동작은 하지만 "자기 자신을 주입"은 설계 냄새. 최후의 수단.</div>
+      <div class="card"><div class="t">같은 함정에 빠지는 것들</div>
+        프록시로 동작하는 어노테이션 전부:<br>
+        <code>@Transactional</code> · <code>@Async</code> · <code>@Cacheable</code> · <code>@Retryable</code><br>
+        → 같은 클래스 안에서 <code>this</code>로 부르면 전부 무시됩니다.</div>
+    </div>
+    <div class="say">면접용: <b>"@Transactional은 프록시가 처리하기 때문에 같은 클래스 안에서 this로 호출하면 프록시를 거치지 않아 전파 속성을 포함한 트랜잭션 설정이 전부 무시됩니다. 그래서 트랜잭션 경계가 다른 메서드는 별도 빈으로 분리합니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html">Spring Reference — Using @Transactional</a>
+      (<i>"In proxy mode (which is the default), only external method calls coming in through the proxy are intercepted. This means that self-invocation … does not lead to an actual transaction at runtime even if the invoked method is marked with @Transactional."</i>) ·
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/aop/proxying.html">Spring Reference — Proxying Mechanisms (self-invocation)</a> ·
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/data-access/transaction/programmatic.html">Programmatic Transaction Management (TransactionTemplate)</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function hl(line) {
+  let code = line, cmt = '';
+  const ci = line.indexOf('//');
+  if (ci >= 0) { code = line.slice(0, ci); cmt = line.slice(ci); }
+  const h = esc(code).replace(/("[^"]*")|(@\w+(?:\([^)]*\))?)|\b(fun|class|try|catch|throw)\b|\b(\d+)\b/g,
+    (m, str, ann, kw) => `<span class="${str ? 'tk-s' : ann ? 'tk-a' : kw ? 'tk-k' : 'tk-n'}">${m}</span>`);
+  return h + (cmt ? `<span class="tk-c">${esc(cmt)}</span>` : '');
+}
+const CODE = {
+  SELF: [
+    '@Service',
+    'class OrderService(...) {',
+    '    @Transactional',
+    '    fun order(userId: Long, productId: Long) {',
+    '        stockRepository.decrease(productId)          // ①',
+    '        orderRepository.save(Order(...))             // ②',
+    '        try { use(userId, 1000) }                    // ③ = this.use()',
+    '        catch (e: PointNotEnoughException) { log.warn("포인트 부족") }',
+    '    }',
+    '',
+    '    @Transactional(propagation = Propagation.REQUIRES_NEW)',
+    '    fun use(userId: Long, amount: Int) {',
+    '        pointRepository.decrease(userId, amount)     // ④ 포인트 차감',
+    '        throw PointNotEnoughException()',
+    '    }',
+    '}',
+  ],
+  SEP: [
+    '@Service',
+    'class OrderService(...) {',
+    '    @Transactional',
+    '    fun order(userId: Long, productId: Long) {',
+    '        stockRepository.decrease(productId)          // ①',
+    '        orderRepository.save(Order(...))             // ②',
+    '        try { pointService.use(userId, 1000) }       // ③ 다른 빈',
+    '        catch (e: PointNotEnoughException) { log.warn("포인트 부족") }',
+    '    }',
+    '}',
+    '@Service',
+    'class PointService(...) {',
+    '    @Transactional(propagation = Propagation.REQUIRES_NEW)',
+    '    fun use(userId: Long, amount: Int) {',
+    '        pointRepository.decrease(userId, amount)     // ④ 포인트 차감',
+    '        throw PointNotEnoughException()',
+    '    }',
+    '}',
+  ],
+};
+const F = (t, c = '', ex = '') => ({ t, c, ex });
+const CTRL = F('OrderController.order()');
+const OPX = (c = 'px1', ex = '') => F('OrderService 프록시 (@Transactional)', c, ex);
+const ORD = (c = '', ex = '') => F('OrderService.order()', c, ex);
+const PPX = (c = 'px2', ex = '') => F('PointService 프록시 (@Transactional)', c, ex);
+const USE = (n, c = '', ex = '') => F(n, c, ex);
+const P1 = (st, cls = '', who = 'order() 주인') => ({ name: '물리 #1', conn: 'conn#42', st, cls, who });
+const P2 = (st, cls = 'p2') => ({ name: '물리 #2', conn: 'conn#43', st, cls, who: 'use() 주인' });
+const D = (s, o, p) => ({ s, o, p });
+const OUT = '바깥 프록시 — order() 의 @Transactional';
+
+const SELF = [
+  { lines: [3], px: true, who: OUT, pass: ['y', '컨트롤러 → <b>OrderService 프록시</b> 경유 ✅ (외부 호출)'],
+    t: '① 바깥 프록시: conn#42로 트랜잭션 시작', d: '컨트롤러는 <b>프록시</b>를 부르니 order()의 @Transactional은 정상 적용됩니다.',
+    stack: [OPX('px1 cur'), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['conn#42'], db: D('10', '0건', '5000') },
+  { lines: [5, 6], who: '내 코드 — order()', pass: ['', '—'], t: '② ①② 실행 (conn#42)', d: '아직 커밋 전.',
+    stack: [ORD('cur'), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '5000') },
+  { lines: [7], skip: [11], who: '내 코드 — order()', pass: ['n', '<b>this.use()</b> → 진짜 객체 안에서 바로 호출 ❌ <b>프록시 안 거침</b>'],
+    t: '③ use() 호출 = this.use() → 11번 줄 어노테이션을 건너뛰고 바로 본문으로',
+    d: '여기가 핵심. 앞 그림에서는 이 순간 포인터가 <b>보라 줄(어노테이션)</b>로 점프했지만, 지금은 <b>11번 줄을 건너뜁니다</b>(빗금). <code>this</code>는 프록시가 아니라 진짜 OrderService라서 REQUIRES_NEW를 읽어 줄 프록시가 없어요. 호출 스택에도 <b>프록시 프레임이 안 생깁니다.</b>',
+    stack: [USE('OrderService.use()', 'cur'), ORD(), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', 'order() 주인 · use()도 그냥 여기 안')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '5000') },
+  { lines: [13], skip: [11], who: '내 코드 — use()', pass: ['n', '프록시 없음 → 새 트랜잭션 없음'],
+    t: '④ 포인트 차감 UPDATE — 새 커넥션이 아니라 conn#42에서', d: '사물함에는 여전히 conn#42. 일시 중단도, 새 커넥션도 없습니다. <b>쥔 커넥션 1개.</b> 포인트 차감이 ①②와 <b>같은 트랜잭션</b>에 섞였어요.',
+    stack: [USE('OrderService.use()', 'cur'), ORD(), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', 'order() 주인 · use()도 그냥 여기 안')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '4000 (미확정)') },
+  { lines: [14], ex: true, skip: [11], who: '내 코드 — use()', pass: ['n', '—'], t: '⑤ 💥 throw PointNotEnoughException', d: '',
+    stack: [USE('OrderService.use()', 'boom', '💥'), ORD(), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', 'order() 주인 · use()도 그냥 여기 안')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '4000 (미확정)') },
+  { lines: [8], who: '내 코드 — order()', pass: ['n', '사이에 프록시가 없으니 예외가 <b>곧장</b> order()로'],
+    t: '⑥ catch가 잡음 — 중간에 롤백도 🚩도 없음', d: '안쪽 프록시가 없으니 <b>conn#43 롤백</b>(REQUIRES_NEW가 했어야 할 일)도, <b>🚩 표시</b>(REQUIRED였다면 했을 일)도 없습니다. 예외가 그대로 order()의 catch로.',
+    stack: [ORD('catch', '잡음'), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '4000 (미확정)') },
+  { lines: [3], px: true, who: OUT, pass: ['y', '바깥 프록시로 복귀'],
+    t: '⑦ 바깥 프록시: 예외 없음 → conn#42 commit → 포인트 차감까지 확정 😱', d: '<b>①② commit + ④ 포인트 차감도 commit.</b> 의도는 "포인트 부족이면 그 차감만 되돌린다"였지만 같은 트랜잭션이라 함께 커밋됐습니다. 로그엔 "포인트 부족"이 찍혔는데 포인트는 빠져 있어요.',
+    stack: [OPX('px1 cur'), CTRL], locker: null, shelf: null, phys: [P1('COMMIT · 반납')], held: [], db: D('<b>9 확정</b>', '<b>1건 확정</b>', '<b class="no">4000 확정 ❌</b>') },
+];
+
+const SEP = [
+  { lines: [3], px: true, who: OUT, pass: ['y', '컨트롤러 → OrderService 프록시 경유 ✅'],
+    t: '① 바깥 프록시: conn#42로 트랜잭션 시작', d: '',
+    stack: [OPX('px1 cur'), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['conn#42'], db: D('10', '0건', '5000') },
+  { lines: [5, 6], who: '내 코드 — order()', pass: ['', '—'], t: '② ①② 실행 (conn#42)', d: '',
+    stack: [ORD('cur'), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '5000') },
+  { lines: [7], who: '내 코드 — order()', pass: ['y', '<b>pointService</b> 필드 = 프록시 → 프록시 경유 ✅'],
+    t: '③ pointService.use() → PointService 프록시로', d: '다른 빈의 필드로 부르니 프록시를 지납니다.',
+    stack: [ORD('cur'), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '5000') },
+  { lines: [13], px: true, who: '안쪽 프록시 — use() 의 @Transactional(REQUIRES_NEW)', pass: ['y', '안쪽 프록시가 REQUIRES_NEW를 읽음 ✅'],
+    t: '④ 안쪽 프록시: 바깥 일시 중단 + conn#43 새로', d: '쥔 커넥션 2개.',
+    stack: [PPX('px2 cur'), ORD(), OPX(), CTRL], locker: 'conn#43', shelf: 'conn#42', phys: [P1('일시 중단', 'susp'), P2('진행 중')], held: ['conn#42', 'conn#43'], db: D('9 (미확정)', '1건 (미확정)', '5000') },
+  { lines: [15], who: '내 코드 — PointService.use()', pass: ['', '—'], t: '⑤ 포인트 차감 UPDATE — conn#43에서', d: '①②와 <b>다른 트랜잭션</b>.',
+    stack: [USE('PointService.use()', 'cur'), PPX(), ORD(), OPX(), CTRL], locker: 'conn#43', shelf: 'conn#42', phys: [P1('일시 중단', 'susp'), P2('진행 중')], held: ['conn#42', 'conn#43'], db: D('9 (미확정)', '1건 (미확정)', '4000 (conn#43 미확정)') },
+  { lines: [16], ex: true, who: '내 코드 — PointService.use()', pass: ['', '—'], t: '⑥ 💥 throw', d: '',
+    stack: [USE('PointService.use()', 'boom', '💥'), PPX(), ORD(), OPX(), CTRL], locker: 'conn#43', shelf: 'conn#42', phys: [P1('일시 중단', 'susp'), P2('진행 중')], held: ['conn#42', 'conn#43'], db: D('9 (미확정)', '1건 (미확정)', '4000 (conn#43 미확정)') },
+  { lines: [13], px: true, ex: true, who: '안쪽 프록시 — use() 의 @Transactional(REQUIRES_NEW)', pass: ['y', '안쪽 프록시 catch'],
+    t: '⑦ 안쪽 프록시: conn#43 rollback → 포인트 원상복구 → conn#42 복원 → 예외 다시 던짐', d: '포인트 차감만 되돌아갑니다. <b>이게 원래 의도한 동작.</b>',
+    stack: [PPX('boom', '💥↓'), ORD(), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 rb')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '<b class="ok">5000 (복구)</b>') },
+  { lines: [8], who: '내 코드 — order()', pass: ['', '—'], t: '⑧ catch가 잡음', d: '',
+    stack: [ORD('catch', '잡음'), OPX(), CTRL], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 rb')], held: ['conn#42'], db: D('9 (미확정)', '1건 (미확정)', '5000') },
+  { lines: [3], px: true, who: OUT, pass: ['y', '바깥 프록시로 복귀'], t: '⑨ 바깥 프록시: conn#42 commit ✅', d: '①② 확정, 포인트는 그대로. 의도대로.',
+    stack: [OPX('px1 cur'), CTRL], locker: null, shelf: null, phys: [P1('COMMIT · 반납'), P2('ROLLBACK · 반납', 'p2 rb')], held: [], db: D('<b>9 확정</b>', '<b>1건 확정</b>', '<b class="ok">5000 ✅</b>') },
+];
+
+const MODES = { SELF, SEP };
+let mode = 'SELF', i = 0;
+function render() {
+  const all = MODES[mode], s = all[i], prev = i ? all[i - 1] : null;
+  const seen = new Set(all.slice(0, i).flatMap(x => x.lines));
+  $('who').innerHTML = `▶ 지금 실행하는 것: <b>${s.who}</b>`;
+  $('code').innerHTML = CODE[mode].map((ln, k) => {
+    const n = k + 1, cur = s.lines.includes(n), sk = (s.skip || []).includes(n);
+    const cls = cur ? `cur ${s.ex ? 'ex' : ''} ${s.px && !s.ex ? 'px' : ''}` : sk ? 'skip' : seen.has(n) ? 'seen' : '';
+    return `<div class="ln ${cls}"><span class="g">${cur ? `<span class="pt">${i + 1}</span>` : sk ? '✕' : ''}</span><span class="n">${n}</span><span>${hl(ln)}${sk ? '  <span class="no" style="font-family:inherit">← 건너뜀</span>' : ''}</span></div>`;
+  }).join('');
+  $('pass').className = 'pass ' + s.pass[0]; $('pass').innerHTML = s.pass[1];
+  $('stk').innerHTML = s.stack.map(f => `<div class="frame ${f.c}">${f.t}${f.ex ? `<span class="ex">${f.ex}</span>` : ''}</div>`).join('');
+  const ch = k => prev && JSON.stringify(prev[k]) !== JSON.stringify(s[k]) ? 'chg' : '';
+  $('tx').innerHTML = `<div class="tx2">
+      <div class="locker ${ch('locker')}"><div class="t">🔒 사물함 (ThreadLocal)</div>${s.locker ? `<span class="chip ${s.locker.includes('43') ? 'v' : ''}">${s.locker}</span>` : '<span class="dim">{ } 비어 있음</span>'}</div>
+      <div class="shelf ${s.shelf ? 'on' : ''} ${ch('shelf')}"><div class="t">⏸ 일시 중단 보관</div>${s.shelf ? `<span class="chip">${s.shelf}</span>` : '<span class="dim">없음</span>'}</div>
+    </div>` + s.phys.map(p => `<div class="phys ${p.cls} ${ch('phys')}"><div class="h"><span>${p.name} · ${p.conn}</span><span class="st">${p.st}</span></div><div class="who2">${p.who}</div></div>`).join('');
+  $('held').textContent = s.held.length;
+  $('held').style.color = s.held.length >= 2 ? 'var(--no)' : s.held.length ? 'var(--ok)' : 'var(--dim)';
+  $('heldc').innerHTML = s.held.map(c => `<span class="chip ${c === 'conn#43' ? 'v' : ''}">${c}</span>`).join('');
+  $('meterBox').className = 'meter ' + ch('held');
+  $('db').className = 'db ' + ch('db');
+  $('db').innerHTML = `<div class="r"><span>① 재고</span><span>${s.db.s}</span></div><div class="r"><span>② 주문</span><span>${s.db.o}</span></div><div class="r"><span>④ 포인트</span><span>${s.db.p}</span></div>`;
+  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${all.length}</div><div class="title">${s.t}</div><div>${s.d}</div>`;
+  $('prev').disabled = i === 0; $('next').disabled = i === all.length - 1;
+  $('dots').innerHTML = all.map((_, k) => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
+  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+}
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m; i = 0;
+  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); render();
+});
+$('next').onclick = () => { i++; render(); };
+$('prev').onclick = () => { i--; render(); };
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' && i < MODES[mode].length - 1) { i++; render(); }
+  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+});
+render();
+</script>
+</body>
+</html>
