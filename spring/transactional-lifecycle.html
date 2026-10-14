@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@Transactional 한 번의 일생: 0~8단계</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9; --orange: #ff9f5a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1240px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  td.n { font-family: ui-monospace, Menlo, monospace; color: var(--blue); font-weight: 700; white-space: nowrap; }
+  tr.miss td { background: #2c1a1e; }
+  tr.fix td { background: #2a2416; }
+  .tag { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; margin-left: 4px; }
+  .tag.miss { background: #3a1a22; color: var(--no); } .tag.fix { background: #3a3218; color: var(--mid); } .tag.okk { background: #183a2b; color: var(--ok); }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+
+  /* 인터랙티브 */
+  .wrap { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 22px; }
+  .stepper { display: grid; gap: 6px; align-content: start; }
+  .st { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: center; padding: 7px 9px; border-radius: 9px; background: #141a21; border: 2px solid transparent; cursor: pointer; font-size: 13px; transition: all .2s; }
+  .st .b { width: 24px; height: 24px; border-radius: 50%; background: #252d38; text-align: center; line-height: 24px; font-size: 12px; font-weight: 700; }
+  .st.on { border-color: var(--blue); background: #1b2a40; }
+  .st.on .b { background: var(--blue); color: #0f1419; }
+  .st.done .b { background: #183a2b; color: var(--ok); }
+  .st.skip { opacity: .4; text-decoration: line-through; }
+  .st.new .b { background: var(--no); color: #0f1419; }
+
+  .stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); column-gap: 44px; }
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 2; }
+  .lane-t { font-size: 12.5px; color: var(--dim); margin-bottom: 8px; font-weight: 700; }
+  .col { display: grid; gap: 10px; align-content: start; }
+  .box { border: 2px solid var(--line); border-radius: 12px; background: #141a21; padding: 9px 12px; transition: all .25s; font-size: 13.5px; }
+  .box .t { font-weight: 700; }
+  .box .s { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--dim); }
+  .box.px { border-color: var(--violet); border-style: dashed; } .box.px .t { color: var(--violet); }
+  .box.tm { border-color: var(--violet); } .box.tm .t { color: var(--violet); }
+  .box.svc { border-color: var(--blue); } .box.svc .t { color: var(--blue); }
+  .box.repo { border-color: var(--cyan); } .box.repo .t { color: var(--cyan); }
+  .box.lock { border-color: var(--mid); background: #221e12; } .box.lock .t { color: var(--mid); }
+  .box.pool .t, .box.conn .t { color: var(--ok); }
+  .box.mysql { border-color: var(--orange); } .box.mysql .t { color: var(--orange); }
+  .hl { box-shadow: 0 0 0 3px rgba(90,169,255,.4); border-color: var(--blue) !important; }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 99px; background: #183a2b; color: var(--ok); font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .chip.ext { background: #2a2140; color: var(--violet); }
+  .chip.gone { background: #252d38; color: var(--dim); text-decoration: line-through; }
+  .kv { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .kv:last-child { border-bottom: none; }
+  .kv b { font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
+  .pslots { display: flex; gap: 6px; margin-top: 6px; }
+  .slot { flex: 1; text-align: center; padding: 4px 0; border-radius: 6px; background: #1e2630; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; border: 1px solid var(--line); }
+  .slot.out { opacity: .3; border-style: dashed; }
+  .stack { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: #11161c; min-height: 150px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
+  .stack .lt { font-size: 12px; color: var(--dim); margin-bottom: auto; }
+  .frame { padding: 4px 9px; border-radius: 6px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+  .frame.px { background: #2a2140; color: var(--violet); } .frame.ext { background: #1b2a40; color: var(--blue); }
+  .frame.cur { outline: 2px solid var(--blue); }
+
+  .ctrl { display: flex; gap: 10px; align-items: center; margin: 18px 0 12px; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  button:disabled { opacity: .4; cursor: default; }
+  .mode { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .mode button { font-size: 13.5px; padding: 6px 12px; }
+  .mode button.on { border-color: var(--mid); background: #2a2416; }
+  .narr { border: 1px solid var(--line); border-radius: 12px; background: #141a21; padding: 14px 16px; min-height: 140px; display: grid; grid-template-columns: 1fr 300px; gap: 18px; }
+  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .narr .title { font-size: 17px; font-weight: 700; margin: 2px 0 6px; }
+  .narr .src { margin-top: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--dim); }
+  .narr .side { border-left: 3px solid var(--orange); padding-left: 12px; font-size: 13.5px; }
+  .narr .side .h { color: var(--orange); font-weight: 700; font-size: 12.5px; margin-bottom: 4px; }
+  .narr .mine { margin-top: 8px; font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #2a2416; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .card { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; font-size: 14px; }
+  .card .x { color: var(--no); margin-bottom: 6px; }
+  .card .o { color: var(--ok); margin-top: 6px; }
+  @media (max-width: 980px) { .wrap, .stage, .narr, .cards { grid-template-columns: 1fr; } svg.wires { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>@Transactional 한 번의 일생: 0~8단계</h1>
+  <div class="sub">프록시 진입부터 커넥션 반납까지 — 스프링 · ThreadLocal · 커넥션 · MySQL이 각 단계에서 무엇을 하는지</div>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">1</span>내가 말한 순서 vs 정확한 순서</h2>
+    <div class="dim" style="margin-bottom:8px;font-size:14px">내가 말한 것: "트랜잭션 시작, 커넥션 꺼내기 → mysql 트랜잭션 열림 → threadlocal 에 바인딩 → 프록시에서 진짜 service 호출 → repository 랑 연결 → 레포지토리는 스레드 로컬이랑 연결"</div>
+    <table>
+      <tr><th>#</th><th>정확한 단계</th><th>내 표현</th><th>판정</th></tr>
+      <tr class="miss"><td class="n">0</td><td>프록시 진입 → <b>사물함부터 확인</b> "이미 트랜잭션 있나?" → 없으면 아래로, 있으면 전파 속성대로</td><td class="dim">(없음)</td><td><span class="tag miss">빠짐</span> REQUIRED 참여가 여기서 결정</td></tr>
+      <tr><td class="n">1</td><td>커넥션 풀에서 커넥션 꺼냄</td><td>커넥션 꺼내기</td><td><span class="tag okk">맞음</span></td></tr>
+      <tr class="fix"><td class="n">2</td><td><code>setAutoCommit(false)</code> = "트랜잭션 시작"의 실체. MySQL 세션은 <b>자동 커밋 안 함 모드</b>가 될 뿐</td><td>mysql 트랜잭션 열림</td><td><span class="tag fix">시점 수정</span> 실제 InnoDB 트랜잭션은 6단계</td></tr>
+      <tr><td class="n">3</td><td>사물함에 바인딩 (<code>bindResource</code>)</td><td>threadlocal 에 바인딩</td><td><span class="tag okk">맞음</span></td></tr>
+      <tr><td class="n">4</td><td>프록시가 진짜 <code>Service</code> 메서드 호출</td><td>프록시에서 진짜 service 호출</td><td><span class="tag okk">맞음</span></td></tr>
+      <tr class="fix"><td class="n">5</td><td>Service가 <b>자기 필드</b>의 Repository <b>메서드를 호출</b> (주입은 앱 시작 때 이미 끝남)</td><td>repository 랑 연결</td><td><span class="tag fix">표현 수정</span></td></tr>
+      <tr class="fix"><td class="n">6</td><td>Repository가 SQL을 실행하는 <b>순간</b> 사물함을 열어 커넥션을 꺼내 씀 → <b>첫 SQL에서 InnoDB 트랜잭션 시작</b></td><td>레포지토리는 스레드 로컬이랑 연결</td><td><span class="tag fix">표현 수정</span> 들고 있는 게 아니라 매번 꺼냄</td></tr>
+      <tr class="miss"><td class="n">7</td><td>정상 반환 → <code>commit()</code> / RuntimeException → <code>rollback()</code></td><td class="dim">(없음)</td><td><span class="tag miss">빠짐</span></td></tr>
+      <tr class="miss"><td class="n">8</td><td>사물함 비움 → auto-commit 원래대로 → 풀에 반납</td><td class="dim">(없음)</td><td><span class="tag miss">빠짐</span> 안 비우면 ThreadLocal 누수</td></tr>
+    </table>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">2</span>단계별로 따라가기 <span class="dim" style="font-weight:400;font-size:14px">— 왼쪽 단계를 누르거나 ← → 키</span></h2>
+    <div class="wrap">
+      <div class="stepper" id="stepper"></div>
+      <div>
+        <div class="stage" id="stage">
+          <svg class="wires" id="wires"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs></svg>
+
+          <div class="col">
+            <div class="lane-t">① 스프링 (애플리케이션)</div>
+            <div class="box px" id="proxy"><div class="t" id="proxyT">OrderService 프록시</div><div class="s">@Transactional</div></div>
+            <div class="box tm" id="tm"><div class="t">TransactionManager</div><div class="s">DataSourceTransactionManager</div></div>
+            <div class="box svc" id="svc"><div class="t" id="svcT">진짜 OrderService</div><div class="s" id="svcS">fun order() { ① ② }</div></div>
+            <div class="box repo" id="repo"><div class="t" id="repoT">StockRepository</div><div class="s">싱글톤 빈 · 커넥션 필드 없음</div></div>
+          </div>
+
+          <div class="col">
+            <div class="lane-t">② 스레드 exec-7</div>
+            <div class="box lock" id="lock"><div class="t">🔒 사물함 (ThreadLocal)</div><div class="s">TransactionSynchronizationManager</div><div id="lockB" style="margin-top:6px"></div></div>
+            <div class="stack" id="stk"></div>
+          </div>
+
+          <div class="col">
+            <div class="lane-t">③ 커넥션 · MySQL</div>
+            <div class="box pool" id="pool"><div class="t">커넥션 풀 (HikariCP)</div><div class="pslots"><div class="slot" id="s42">#42</div><div class="slot">#43</div><div class="slot">#44</div></div></div>
+            <div class="box conn" id="conn"><div class="t">Connection #42</div>
+              <div class="kv"><span>autoCommit</span><b id="ac">true</b></div>
+              <div class="kv"><span>쓰는 스레드</span><b id="owner">-</b></div>
+            </div>
+            <div class="box mysql" id="mysql"><div class="t">MySQL 세션 · InnoDB</div>
+              <div class="kv"><span>세션 autocommit</span><b id="mAc">1</b></div>
+              <div class="kv"><span>InnoDB 트랜잭션</span><b id="mTrx">없음</b></div>
+              <div class="kv"><span>트랜잭션 ID</span><b id="mId">-</b></div>
+              <div class="kv"><span>Read View</span><b id="mRv">-</b></div>
+              <div class="kv"><span>stock id=1</span><b id="mRow">qty 10</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ctrl">
+          <button id="prev">◀ 이전</button>
+          <button id="next" class="primary">다음 ▶</button>
+          <div class="mode">
+            <button id="mA" class="on">사물함 비어 있음 (새로 시작)</button>
+            <button id="mB">이미 트랜잭션 있음 (REQUIRED 참여)</button>
+          </div>
+        </div>
+        <div class="narr" id="narr"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="num">3</span>자주 틀리는 세 가지</h2>
+    <div class="cards">
+      <div class="card"><div class="x">❌ "@Transactional 메서드에 들어가면 DB 트랜잭션이 열린다"</div>
+        스프링은 커넥션의 auto-commit만 끕니다. InnoDB가 트랜잭션을 실제로 시작하는 건 <b>첫 SQL</b>이고, 트랜잭션 ID는 <b>첫 쓰기</b>, Read View는 <b>첫 일반 SELECT</b>에서 생깁니다.
+        <div class="o">✅ "auto-commit을 끄고, 첫 SQL에서 DB 트랜잭션이 시작된다"</div></div>
+      <div class="card"><div class="x">❌ "레포지토리가 커넥션을 갖고 있다"</div>
+        레포지토리는 싱글톤이라 커넥션을 필드로 가질 수 없습니다. SQL마다 <b>지금 실행 중인 스레드의 사물함</b>에서 꺼내요.
+        <div class="o">✅ "SQL을 실행할 때마다 ThreadLocal에서 꺼내 쓴다"</div></div>
+      <div class="card"><div class="x">❌ "프록시는 들어오면 항상 커넥션을 꺼낸다"</div>
+        먼저 사물함을 봅니다. 이미 트랜잭션이 있으면 REQUIRED는 <b>참여만</b> 하고 커넥션을 꺼내지도, commit하지도 않아요 (오른쪽 위 두 번째 버튼).
+        <div class="o">✅ "먼저 기존 트랜잭션을 확인하고 전파 속성대로 처리한다"</div></div>
+    </div>
+    <div class="say">면접용 (30초): <b>"@Transactional 프록시는 먼저 ThreadLocal에 진행 중인 트랜잭션이 있는지 보고, 없으면 풀에서 커넥션을 꺼내 auto-commit을 끄고 ThreadLocal에 바인딩한 뒤 실제 메서드를 호출합니다. 레포지토리는 SQL을 실행할 때 그 ThreadLocal에서 같은 커넥션을 꺼내 쓰고, 메서드가 끝나면 프록시가 결과에 따라 commit이나 rollback을 한 뒤 바인딩을 풀고 커넥션을 반납합니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java">AbstractPlatformTransactionManager</a> (getTransaction → 기존 트랜잭션 확인 → 전파 처리) ·
+      <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-jdbc/src/main/java/org/springframework/jdbc/datasource/DataSourceTransactionManager.java">DataSourceTransactionManager</a> (doBegin: getConnection → setAutoCommit(false) → bindResource / doCleanupAfterCompletion) ·
+      <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-jdbc/src/main/java/org/springframework/jdbc/datasource/DataSourceUtils.java">DataSourceUtils</a> ·
+      <a style="color:var(--blue)" href="https://dev.mysql.com/doc/refman/8.0/en/innodb-autocommit-commit-rollback.html">MySQL — autocommit, Commit, and Rollback</a> ·
+      <a style="color:var(--blue)" href="https://dev.mysql.com/doc/refman/8.0/en/innodb-consistent-read.html">MySQL — Consistent Nonlocking Reads</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const C = { blue: '#5aa9ff', ok: '#3ecf8e', mid: '#f5b84a', no: '#f2667a', violet: '#b58cff', cyan: '#4fd1d9', orange: '#ff9f5a', dim: '#8b95a3' };
+const F = (t, c = '') => ({ t, c });
+const M0 = { ac: 'true', owner: '-', pool: 'in', mAc: '1', mTrx: '없음', mId: '-', mRv: '-', mRow: 'qty 10' };
+
+/* 모드 A: 사물함 비어 있음 */
+const A = {
+  names: { proxyT: 'OrderService 프록시', svcT: '진짜 OrderService', svcS: 'fun order() { ① ② }', repoT: 'StockRepository' },
+  base: { lock: 'empty', stack: [F('톰캣 → 컨트롤러')], ...M0 },
+  steps: [
+    { lbl: '프록시 진입 · 사물함 확인', t: '0. 프록시 진입 → TransactionManager가 먼저 사물함을 열어 봄',
+      d: '커넥션부터 꺼내지 않습니다. <b>"이 스레드에 이미 진행 중인 트랜잭션이 있나?"</b>를 먼저 확인해요. 지금은 비어 있으니 <b>새 물리 트랜잭션을 시작</b>하기로 결정합니다.',
+      my: '세션은 아직 아무 일도 없음', mine: '내 순서에 <b>없던 단계</b>', src: 'getTransaction() → doGetTransaction() → TransactionSynchronizationManager.getResource(ds) → null',
+      hl: ['proxy', 'tm', 'lock'], wires: [['proxy', 'tm', C.violet, 'getTransaction()'], ['tm', 'lock', C.mid, '있나? → 없음']],
+      stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시', 'px')] },
+    { lbl: '풀에서 커넥션 꺼냄', t: '1. 커넥션 풀에서 conn#42를 빌림',
+      d: '풀은 미리 열어 둔 커넥션을 빌려줄 뿐입니다. <b>TCP 연결을 새로 맺는 게 아니에요.</b>',
+      my: '이미 열려 있던 세션을 재사용', mine: '내 표현 "커넥션 꺼내기" — 맞음', src: 'doBegin(): obtainDataSource().getConnection()',
+      hl: ['tm', 'pool'], wires: [['tm', 'pool', C.ok, 'getConnection()']],
+      stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시', 'px')], pool: 'out', owner: 'exec-7' },
+    { lbl: 'autoCommit 끔', t: '2. conn#42.setAutoCommit(false) — "트랜잭션 시작"의 실체',
+      d: '이제 이 커넥션에서 실행되는 SQL은 <b>commit()을 부를 때까지 확정되지 않습니다.</b> 격리 수준·readOnly도 이때 설정해요.',
+      my: '<code>SET autocommit=0</code> → 세션이 <b>"자동 커밋 안 함" 모드</b>가 될 뿐. InnoDB 트랜잭션 객체·ID·Read View는 <b>아직 없음</b>', mine: '내 표현 "mysql 트랜잭션 열림" — <b class="mid">시점이 이르다</b> (실제는 6단계)',
+      src: 'doBegin(): if (con.getAutoCommit()) con.setAutoCommit(false)',
+      hl: ['tm', 'conn', 'mysql'], wires: [['tm', 'conn', C.ok, 'setAutoCommit(false)'], ['conn', 'mysql', C.orange, 'SET autocommit=0']],
+      stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시', 'px')], pool: 'out', owner: 'exec-7', ac: 'false', mAc: '0', mTrx: '아직 없음' },
+    { lbl: '사물함에 바인딩', t: '3. conn#42를 exec-7의 사물함에 넣음',
+      d: '열쇠는 <code>DataSource</code>, 값은 conn#42를 감싼 <code>ConnectionHolder</code>. <b>exec-7의 사물함에만</b> 들어갑니다.',
+      my: '변화 없음 (스프링 내부 일)', mine: '내 표현 "threadlocal 에 바인딩" — 맞음', src: 'doBegin(): TransactionSynchronizationManager.bindResource(ds, holder)',
+      hl: ['tm', 'lock'], wires: [['tm', 'lock', C.mid, 'bindResource']],
+      lock: 'full', stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시', 'px')], pool: 'out', owner: 'exec-7', ac: 'false', mAc: '0', mTrx: '아직 없음' },
+    { lbl: '진짜 Service 호출', t: '4. 프록시가 진짜 OrderService.order()를 호출',
+      d: '프록시는 커넥션을 <b>건네지 않습니다.</b> 그냥 진짜 객체에게 일을 넘겨요.',
+      my: '변화 없음', mine: '내 표현 "프록시에서 진짜 service 호출" — 맞음',
+      hl: ['proxy', 'svc'], wires: [['proxy', 'svc', C.blue, 'target.order()']],
+      lock: 'full', stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시', 'px'), F('order()', 'cur')], pool: 'out', owner: 'exec-7', ac: 'false', mAc: '0', mTrx: '아직 없음' },
+    { lbl: 'Service → Repository 호출', t: '5. order()가 자기 필드의 stockRepository.decrease()를 호출',
+      d: 'Repository는 <b>앱이 뜰 때 이미 생성자 주입</b>으로 필드에 들어가 있습니다. 지금은 메서드를 <b>호출</b>할 뿐이에요. 새로 "연결"되는 게 없습니다.',
+      my: '변화 없음', mine: '내 표현 "repository 랑 연결" — <b class="mid">"호출"이 정확</b>',
+      hl: ['svc', 'repo'], wires: [['svc', 'repo', C.blue, 'decrease()']],
+      lock: 'full', stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시', 'px'), F('order()'), F('stockRepository.decrease()', 'cur')], pool: 'out', owner: 'exec-7', ac: 'false', mAc: '0', mTrx: '아직 없음' },
+    { lbl: 'SQL 순간 사물함에서 꺼냄 · DB 트랜잭션 시작', t: '6. SQL을 실행하는 순간 사물함을 열어 conn#42를 꺼냄 → UPDATE',
+      d: '레포지토리는 커넥션을 들고 있지 않습니다. <b>SQL마다</b> "지금 나를 부른 스레드(exec-7)의 사물함"을 엽니다. 있으니 conn#42로 UPDATE를 보내요. ② INSERT도 같은 방식.',
+      my: '<b>첫 SQL이 들어온 지금 InnoDB 트랜잭션이 실제로 시작</b>. 쓰기라서 <b>트랜잭션 ID 발급</b>. 행에는 새 값 + 도장, 이전 값은 undo log. Read View는 일반 SELECT가 처음 나올 때 생김 (이 흐름엔 없음)',
+      mine: '내 표현 "레포지토리는 스레드 로컬이랑 연결" — <b class="mid">"SQL마다 꺼내 쓴다"가 정확</b>',
+      src: 'DataSourceUtils.doGetConnection() → getResource(ds) → conn#42',
+      hl: ['repo', 'lock', 'conn', 'mysql'], wires: [['repo', 'lock', C.cyan, 'getResource(ds)'], ['conn', 'mysql', C.orange, 'UPDATE stock']],
+      lock: 'full', stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시', 'px'), F('order()'), F('stockRepository.decrease()  SQL', 'cur')], pool: 'out', owner: 'exec-7', ac: 'false', mAc: '0', mTrx: '시작됨 (ACTIVE)', mId: '1042', mRv: '아직 없음', mRow: 'qty 9 · 도장 1042 (미확정)' },
+    { lbl: 'commit / rollback', t: '7. order()가 정상 반환 → 프록시가 conn#42.commit()',
+      d: 'RuntimeException이 프록시까지 올라왔다면 여기서 <code>rollback()</code>. 프록시가 보는 건 <b>"target 호출에서 예외가 튀어나왔나"</b> 하나입니다.',
+      my: 'COMMIT → 변경 확정, InnoDB 트랜잭션 종료', mine: '내 순서에 <b>없던 단계</b>', src: 'commitTransactionAfterReturning() → processCommit() → doCommit() → con.commit()',
+      hl: ['proxy', 'tm', 'conn', 'mysql'], wires: [['tm', 'conn', C.ok, 'commit()'], ['conn', 'mysql', C.orange, 'COMMIT']],
+      lock: 'full', stack: [F('톰캣 → 컨트롤러'), F('OrderService 프록시 → commit', 'px')], pool: 'out', owner: 'exec-7', ac: 'false', mAc: '0', mTrx: '종료 (COMMITTED)', mId: '1042', mRow: 'qty 9 · 확정' },
+    { lbl: '사물함 비움 · 반납', t: '8. 사물함 비움 → autoCommit 원래대로 → 풀에 반납',
+      d: 'exec-7은 풀로 돌아가 <b>다음 요청</b>을 처리합니다. 사물함을 안 비우면 다음 요청이 엉뚱한 커넥션을 보게 돼요 (08-18 ThreadLocal 누수). autoCommit도 되돌려야 다음에 이 커넥션을 빌리는 쪽이 놀라지 않습니다.',
+      my: '<code>SET autocommit=1</code> 복구, 세션은 풀에 남아 재사용', mine: '내 순서에 <b>없던 단계</b>', src: 'doCleanupAfterCompletion(): unbindResource → setAutoCommit(true) → releaseConnection',
+      hl: ['tm', 'lock', 'pool'], wires: [['lock', 'tm', C.mid, 'unbindResource'], ['tm', 'pool', C.ok, '반납']],
+      lock: 'gone', stack: [F('톰캣 → 컨트롤러')], mRow: 'qty 9 · 확정' },
+  ],
+};
+
+/* 모드 B: 이미 트랜잭션 있음 — order() 안에서 pointService.use() 진입 */
+const OUT = [F('톰캣 → 컨트롤러'), F('OrderService 프록시 (주인)', 'ext'), F('order()  ① ② 끝')];
+const BM = { lock: 'ext', pool: 'out', owner: 'exec-7', ac: 'false', mAc: '0', mTrx: '시작됨 (ACTIVE)', mId: '1042', mRv: '-', mRow: 'qty 9 · 도장 1042 (미확정)' };
+const B = {
+  names: { proxyT: 'PointService 프록시', svcT: '진짜 PointService', svcS: 'fun use() { ③ }', repoT: 'PointRepository' },
+  base: { stack: OUT, ...BM },
+  steps: [
+    { lbl: '프록시 진입 · 사물함 확인', t: '0. PointService 프록시 진입 → 사물함을 열어 봄 → 이미 있음!',
+      d: '바깥 <code>OrderService</code>가 연 트랜잭션(conn#42)이 <b>같은 스레드의 사물함</b>에 있습니다. 기본 전파 <b>REQUIRED</b>라서 <b>새로 만들지 않고 참여</b>하기로 결정해요. 논리 트랜잭션은 하나 더 생기지만 물리는 그대로 하나.',
+      my: '변화 없음 (InnoDB 트랜잭션 1042 계속 진행 중)', mine: '이 분기 때문에 0단계가 꼭 필요하다', src: 'getTransaction() → isExistingTransaction() → handleExistingTransaction() → REQUIRED: 참여',
+      hl: ['proxy', 'tm', 'lock'], wires: [['proxy', 'tm', C.violet, 'getTransaction()'], ['tm', 'lock', C.mid, '있나? → 있음']],
+      stack: [...OUT, F('PointService 프록시 (손님)', 'px')] },
+    { lbl: '풀에서 커넥션 꺼냄', skip: true, t: '1. 건너뜀', d: '참여자는 커넥션을 새로 빌리지 않습니다.', my: '-', stack: [...OUT, F('PointService 프록시 (손님)', 'px')] },
+    { lbl: 'autoCommit 끔', skip: true, t: '2. 건너뜀', d: '이미 꺼져 있습니다.', my: '-', stack: [...OUT, F('PointService 프록시 (손님)', 'px')] },
+    { lbl: '사물함에 바인딩', skip: true, t: '3. 건너뜀', d: '이미 들어 있습니다.', my: '-', stack: [...OUT, F('PointService 프록시 (손님)', 'px')] },
+    { lbl: '진짜 Service 호출', t: '4. 프록시가 진짜 PointService.use()를 호출',
+      d: '1~3을 건너뛰고 바로 진짜 메서드로 갑니다.', my: '변화 없음',
+      hl: ['proxy', 'svc'], wires: [['proxy', 'svc', C.blue, 'target.use()']],
+      stack: [...OUT, F('PointService 프록시 (손님)', 'px'), F('use()', 'cur')] },
+    { lbl: 'Service → Repository 호출', t: '5. use()가 pointRepository를 호출', d: '필드로 주입된 레포지토리의 메서드 호출.', my: '변화 없음',
+      hl: ['svc', 'repo'], wires: [['svc', 'repo', C.blue, 'use()']],
+      stack: [...OUT, F('PointService 프록시 (손님)', 'px'), F('use()'), F('pointRepository.use()', 'cur')] },
+    { lbl: 'SQL 순간 사물함에서 꺼냄', t: '6. 사물함에서 꺼낸 건 바깥이 넣은 conn#42',
+      d: '그래서 ③의 SQL이 ①②와 <b>같은 커넥션, 같은 InnoDB 트랜잭션(1042)</b>에 들어갑니다. 함께 commit/rollback되는 이유예요.',
+      my: '같은 트랜잭션 1042에 UPDATE point 추가', src: 'DataSourceUtils.doGetConnection() → getResource(ds) → conn#42 (바깥 것)',
+      hl: ['repo', 'lock', 'conn', 'mysql'], wires: [['repo', 'lock', C.cyan, 'getResource(ds)'], ['conn', 'mysql', C.orange, 'UPDATE point']],
+      stack: [...OUT, F('PointService 프록시 (손님)', 'px'), F('use()'), F('pointRepository.use()  SQL', 'cur')], mRow: 'stock·point 모두 1042 (미확정)' },
+    { lbl: 'commit / rollback', t: '7. use() 정상 반환 → 그런데 commit하지 않음',
+      d: '<b>주인이 아니라서</b> commit도 rollback도 직접 하지 않습니다. 예외였다면 <b class="no">🚩 rollback-only</b> 표시만 남겨요 (꼬리질문 9). 진짜 commit은 바깥 OrderService 프록시가 나중에 합니다.',
+      my: '변화 없음 — 아직 미확정', src: 'processCommit(): status.isNewTransaction() == false → doCommit 안 함',
+      hl: ['proxy', 'tm'], stack: [...OUT, F('PointService 프록시 → 아무것도 안 함', 'px')], mRow: 'stock·point 모두 1042 (미확정)' },
+    { lbl: '사물함 비움 · 반납', t: '8. 사물함도 그대로, 커넥션도 반납 안 함',
+      d: '정리도 <b>주인의 몫</b>입니다. 참여자가 사물함을 비우면 바깥 트랜잭션이 커넥션을 잃어버리니까요. 스택은 바깥 <code>order()</code>로 돌아갑니다.',
+      my: '변화 없음', hl: ['lock'], stack: OUT, mRow: 'stock·point 모두 1042 (미확정)' },
+  ],
+};
+
+let mode = A, i = 0;
+function lockHtml(s) {
+  if (s === 'full') return '<span class="chip">conn#42</span> <span class="dim" style="font-size:12px">(내가 넣음)</span>';
+  if (s === 'ext') return '<span class="chip ext">conn#42</span> <span class="dim" style="font-size:12px">(바깥 OrderService가 넣음)</span>';
+  if (s === 'gone') return '<span class="chip gone">conn#42</span> <span class="dim" style="font-size:12px">비움</span>';
+  return '<span class="dim" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px">{ } 비어 있음</span>';
+}
+function render() {
+  const s = Object.assign({}, mode.base, mode.steps[i]);
+  Object.entries(mode.names).forEach(([k, v]) => $(k).textContent = v);
+  $('stepper').innerHTML = mode.steps.map((x, k) => `<div class="st ${k === i ? 'on' : k < i ? 'done' : ''} ${x.skip ? 'skip' : ''}" data-k="${k}"><span class="b">${k}</span><span>${x.lbl}</span></div>`).join('');
+  document.querySelectorAll('.st').forEach(e => e.onclick = () => { i = +e.dataset.k; render(); });
+  document.querySelectorAll('.hl').forEach(e => e.classList.remove('hl'));
+  (s.hl || []).forEach(id => $(id).classList.add('hl'));
+  $('lockB').innerHTML = lockHtml(s.lock);
+  $('stk').innerHTML = '<div class="lt">📚 exec-7의 호출 스택 (위가 최신)</div>' + s.stack.slice().reverse().map(f => `<div class="frame ${f.c}">${f.t}</div>`).join('');
+  $('s42').className = 'slot' + (s.pool === 'out' ? ' out' : '');
+  $('ac').textContent = s.ac; $('ac').style.color = s.ac === 'false' ? C.mid : '';
+  $('owner').textContent = s.owner;
+  $('mAc').textContent = s.mAc; $('mTrx').textContent = s.mTrx; $('mId').textContent = s.mId; $('mRv').textContent = s.mRv; $('mRow').textContent = s.mRow;
+  $('narr').innerHTML = `<div><div class="step">${mode === B ? '이미 트랜잭션 있음 · ' : ''}STEP ${i} / ${mode.steps.length - 1}</div><div class="title">${s.t}</div><div>${s.d}</div>` +
+    (s.src ? `<div class="src">스프링 코드: ${s.src}</div>` : '') + (s.mine ? `<div class="mine">${s.mine}</div>` : '') + '</div>' +
+    `<div class="side"><div class="h">MySQL 쪽에서는</div>${s.my}</div>`;
+  $('prev').disabled = i === 0; $('next').disabled = i === mode.steps.length - 1;
+  requestAnimationFrame(() => drawWires(s.wires || []));
+}
+function drawWires(ws) {
+  const svg = $('wires'), st = $('stage').getBoundingClientRect();
+  svg.querySelectorAll('g').forEach(g => g.remove());
+  ws.forEach(([a, b, color, label], n) => {
+    const A_ = $(a).getBoundingClientRect(), B_ = $(b).getBoundingClientRect();
+    const ac = { x: A_.left + A_.width / 2 - st.left, y: A_.top + A_.height / 2 - st.top };
+    const bc = { x: B_.left + B_.width / 2 - st.left, y: B_.top + B_.height / 2 - st.top };
+    const edge = (R, from, to) => {
+      const cx = R.left + R.width / 2 - st.left, cy = R.top + R.height / 2 - st.top, dx = to.x - from.x, dy = to.y - from.y;
+      const k = Math.min(dx === 0 ? Infinity : (R.width / 2) / Math.abs(dx), dy === 0 ? Infinity : (R.height / 2) / Math.abs(dy));
+      return { x: cx + dx * k, y: cy + dy * k };
+    };
+    const p1 = edge(A_, ac, bc), p2 = edge(B_, bc, ac);
+    const vertical = Math.abs(p1.x - p2.x) < 30;
+    const mx = (p1.x + p2.x) / 2 + (vertical ? 60 : 0), my = (p1.y + p2.y) / 2 + (n % 2 ? 14 : -6);
+    const w = label.length * 7.2 + 14;
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.innerHTML = `<path d="M${p1.x},${p1.y} Q${mx},${my - (vertical ? 0 : 28)} ${p2.x},${p2.y}" stroke="${color}" stroke-width="2.5" fill="none" marker-end="url(#ah)" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" from="20" to="0" dur="0.6s" repeatCount="indefinite"/></path>
+      <rect x="${mx - w / 2}" y="${my - 24}" width="${w}" height="20" rx="6" fill="#0f1419" stroke="${color}"/>
+      <text x="${mx}" y="${my - 10}" fill="${color}" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">${label}</text>`;
+    svg.appendChild(g);
+  });
+}
+function setMode(m) { mode = m; i = 0; $('mA').classList.toggle('on', m === A); $('mB').classList.toggle('on', m === B); render(); }
+$('next').onclick = () => { i++; render(); };
+$('prev').onclick = () => { i--; render(); };
+$('mA').onclick = () => setMode(A); $('mB').onclick = () => setMode(B);
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' && i < mode.steps.length - 1) { i++; render(); }
+  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+});
+window.addEventListener('resize', () => drawWires((mode.steps[i].wires) || []));
+render();
+</script>
+</body>
+</html>
