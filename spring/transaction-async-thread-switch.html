@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@Transactional 안에서 runAsync로 스레드가 바뀌면</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .quote { border-left: 4px solid var(--no); background: #2c1a1e; padding: 12px 16px; border-radius: 8px; margin: 10px 0 18px; font-size: 15.5px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13.5px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); }
+
+  .stage { position: relative; display: grid; grid-template-columns: 190px minmax(0, 1fr) minmax(0, 1fr); column-gap: 60px; row-gap: 22px; }
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 2; }
+  .col-title { font-size: 12.5px; color: var(--dim); margin-bottom: 8px; }
+  .box { border: 2px solid var(--line); border-radius: 12px; background: #141a21; padding: 10px 12px; transition: all .25s; }
+  .hl { box-shadow: 0 0 0 3px rgba(90,169,255,.35); border-color: var(--blue) !important; }
+
+  .pool { display: grid; gap: 8px; }
+  .conn { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; padding: 7px 10px; border-radius: 8px; background: #1e2630; border: 2px solid var(--line); transition: all .25s; display: flex; justify-content: space-between; gap: 6px; }
+  .conn.out { opacity: .35; border-style: dashed; }
+  .conn.hl { border-color: var(--ok) !important; background: #183a2b; opacity: 1; box-shadow: none; }
+  .conn.hlno { border-color: var(--no); background: #3a1a22; opacity: 1; }
+  .ac { font-size: 11px; padding: 0 6px; border-radius: 99px; background: #252d38; white-space: nowrap; }
+  .db .t { font-weight: 700; }
+  .dbrow { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+
+  .thread { border: 2px solid var(--blue); border-radius: 14px; overflow: hidden; transition: all .25s; }
+  .thread.w { border-color: var(--violet); }
+  .thread .head { background: #1b2a40; color: var(--blue); padding: 8px 14px; font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 13px; display: flex; justify-content: space-between; }
+  .thread.w .head { background: #2a2140; color: var(--violet); }
+  .state { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #252d38; color: var(--text); font-weight: 400; }
+  .thread .inner { padding: 12px; display: grid; gap: 12px; }
+  .thread.idle { opacity: .45; }
+  .locker { border: 2px solid var(--mid); border-radius: 12px; background: #221e12; padding: 10px 12px; transition: all .25s; }
+  .locker .t { color: var(--mid); font-weight: 700; font-size: 14px; }
+  .locker .map { margin-top: 4px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; min-height: 22px; }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 99px; background: #183a2b; color: var(--ok); font-weight: 700; }
+  .chip.gone { background: #252d38; color: var(--dim); text-decoration: line-through; }
+  .stack { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: #11161c; min-height: 170px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; transition: all .25s; }
+  .stack .lt { font-size: 12px; color: var(--dim); margin-bottom: auto; }
+  .frame { padding: 5px 10px; border-radius: 6px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .frame.px { background: #2a2140; color: var(--violet); }
+  .frame.cur { outline: 2px solid var(--blue); }
+  .frame.boom { background: #3a1a22; color: var(--no); font-weight: 700; }
+  .frame.fut { background: #2a2416; color: var(--mid); }
+
+  .beans { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .bean { border-color: var(--cyan); text-align: center; }
+  .bean .t { color: var(--cyan); font-weight: 700; font-size: 14px; }
+  .heapnote { grid-column: 2 / 4; font-size: 12.5px; color: var(--dim); margin-top: -14px; text-align: center; }
+  .future { border: 2px dashed var(--mid); border-radius: 12px; padding: 8px 12px; background: #221e12; font-size: 13px; text-align: center; transition: all .25s; }
+  .future .t { color: var(--mid); font-weight: 700; }
+
+  .ctrl { display: flex; gap: 10px; align-items: center; margin: 18px 0 12px; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  button:disabled { opacity: .4; cursor: default; }
+  .dots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dot { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; cursor: pointer; }
+  .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
+  .mode { margin-left: auto; display: flex; gap: 6px; }
+  .mode button { font-size: 13.5px; padding: 6px 12px; }
+  .mode button.on { border-color: var(--mid); background: #2a2416; }
+  .narr { border: 1px solid var(--line); border-radius: 12px; background: #141a21; padding: 14px 16px; min-height: 120px; }
+  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .narr .title { font-size: 17px; font-weight: 700; margin: 2px 0 6px; }
+  .narr .src { margin-top: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  @media (max-width: 900px) { .stage { grid-template-columns: 1fr; } .beans, .heapnote { grid-column: auto; } svg.wires { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>@Transactional 안에서 runAsync로 스레드가 바뀌면</h1>
+  <div class="quote">③만 다른 스레드(worker-3)에서 돌면 <b>사물함(ThreadLocal)도, 호출 스택도 따로</b>입니다. 그래서 worker-3은 트랜잭션 커넥션을 못 찾고, worker-3의 예외는 프록시에 닿지 않아 <b>①②는 커밋</b>됩니다.</div>
+
+  <section>
+<pre><code>@Transactional
+fun order(userId: Long, productId: Long) {
+    stockRepository.decrease(productId)          <span class="dim">// ① exec-7</span>
+    orderRepository.save(Order(...))             <span class="dim">// ② exec-7</span>
+    CompletableFuture.runAsync {                 <span class="dim">// ③ worker-3</span>
+        pointRepository.use(userId, 1000)        <span class="dim">//    → 여기서 예외 발생!</span>
+    }<span id="joinCode" style="display:none;color:#f5b84a">.join()                                      // ← 결과를 기다림</span>
+}                                                <span class="dim">// ← exec-7은 이 줄에 도착</span></code></pre>
+  </section>
+
+  <section>
+    <h2>단계별로 따라가기 <span class="dim" style="font-weight:400;font-size:14px">— "다음" 버튼, 숫자, ← → 키</span></h2>
+
+    <div class="stage" id="stage">
+      <svg class="wires" id="wires">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+      </svg>
+
+      <!-- 왼쪽 -->
+      <div style="grid-row: 1 / 3">
+        <div class="col-title">커넥션 풀</div>
+        <div class="box pool">
+          <div class="conn" id="c42"><span>conn#42</span><span class="ac" id="c42ac">대기</span></div>
+          <div class="conn" id="c43"><span>conn#43</span><span class="ac">대기</span></div>
+          <div class="conn" id="c44"><span>conn#44</span><span class="ac">대기</span></div>
+          <div class="conn" id="c45"><span>conn#45</span><span class="ac" id="c45ac">대기</span></div>
+        </div>
+        <div class="box db" id="db" style="margin-top:14px">
+          <div class="t">MySQL</div>
+          <div class="dbrow"><span>① 재고</span><span id="dStock">10</span></div>
+          <div class="dbrow"><span>② 주문</span><span id="dOrder">없음</span></div>
+          <div class="dbrow"><span>③ 포인트</span><span id="dPoint">5000</span></div>
+          <div class="dim" style="font-size:12px;margin-top:6px" id="dbtxt">트랜잭션 없음</div>
+        </div>
+        <div class="future" id="future" style="margin-top:14px">
+          <div class="t">📦 CompletableFuture</div>
+          <div id="futTxt" class="dim">아직 없음</div>
+        </div>
+      </div>
+
+      <!-- exec-7 -->
+      <div>
+        <div class="col-title">톰캣 요청 스레드</div>
+        <div class="thread" id="tE">
+          <div class="head"><span>http-nio-8080-exec-7</span><span class="state" id="sE">대기</span></div>
+          <div class="inner">
+            <div class="locker" id="lE"><div class="t">🔒 exec-7의 사물함 (ThreadLocal)</div><div class="map" id="mE"></div></div>
+            <div class="stack" id="kE"><div class="lt">📚 exec-7의 호출 스택 (위가 최신)</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- worker-3 -->
+      <div>
+        <div class="col-title">ForkJoinPool 공용 풀 스레드</div>
+        <div class="thread w" id="tW">
+          <div class="head"><span>ForkJoinPool.commonPool-worker-3</span><span class="state" id="sW">대기</span></div>
+          <div class="inner">
+            <div class="locker" id="lW"><div class="t">🔒 worker-3의 사물함 (ThreadLocal)</div><div class="map" id="mW"></div></div>
+            <div class="stack" id="kW"><div class="lt">📚 worker-3의 호출 스택 (위가 최신)</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="beans">
+        <div class="box bean" id="bStock"><div class="t">StockRepository</div></div>
+        <div class="box bean" id="bOrder"><div class="t">OrderRepository</div></div>
+        <div class="box bean" id="bPoint"><div class="t">PointRepository</div></div>
+      </div>
+      <div class="heapnote">↑ 싱글톤 빈은 힙에 하나 · 두 스레드가 같은 객체를 씀 (공유) — 사물함과 호출 스택만 스레드마다 따로</div>
+    </div>
+
+    <div class="ctrl">
+      <button id="prev">◀ 이전</button>
+      <button id="next" class="primary">다음 ▶</button>
+      <div class="dots" id="dots"></div>
+      <div class="mode">
+        <button id="mA" class="on">runAsync만 (문제)</button>
+        <button id="mB">.join()으로 기다리면?</button>
+      </div>
+    </div>
+    <div class="narr" id="narr"></div>
+  </section>
+
+  <section>
+    <h2>정리</h2>
+    <table>
+      <tr><th>질문</th><th>답</th><th>이유 (어느 칸이 스레드마다 따로인가)</th></tr>
+      <tr><td>worker-3이 conn#42를 찾나?</td><td class="no">못 찾는다 → 새 conn#45</td><td><b>사물함(ThreadLocal)</b>은 스레드마다 따로. exec-7 사물함에만 conn#42가 있음</td></tr>
+      <tr><td>worker-3의 예외를 프록시가 아나?</td><td class="no">모른다 → ①② commit</td><td>예외는 <b>발생한 스레드의 호출 스택</b>으로만 올라감. 프록시는 exec-7 스택에 있음</td></tr>
+      <tr><td>예외는 어디로 가나?</td><td>CompletableFuture 안에 담김</td><td>아무도 <code>join()</code>/<code>get()</code>/<code>exceptionally</code>로 꺼내지 않으면 <b>로그도 없이 사라짐</b></td></tr>
+      <tr><td>순서는 항상 같나?</td><td>아니다</td><td>worker-3이 언제 실행될지는 스케줄러 마음. exec-7이 커밋할 때 worker-3은 시작 전일 수도, 끝났을 수도 있음</td></tr>
+    </table>
+    <div class="key"><b>.join()을 붙이면</b> exec-7이 기다렸다가 예외를 <code>CompletionException</code>으로 감싸 <b>exec-7 스택에서 다시 던집니다.</b> 그러면 프록시가 받아서 ①②를 rollback해요.<br>
+    단, ③은 여전히 <b>다른 커넥션(conn#45)</b>이라 같은 트랜잭션이 아닙니다. ③이 무언가를 커밋한 뒤에 실패했다면 그건 rollback되지 않아요. 같은 트랜잭션이어야 하는 작업은 <b>애초에 같은 스레드에서</b> 해야 합니다.</div>
+    <div class="say">면접용: <b>"스프링 트랜잭션은 ThreadLocal에 묶여 있어서 다른 스레드로 넘어가면 전파되지 않습니다. 새 스레드는 트랜잭션 밖에서 별도 커넥션으로 실행되고, 거기서 난 예외도 원래 스레드의 프록시에 도달하지 않아 원래 트랜잭션은 커밋됩니다."</b></div>
+    <p class="dim" style="margin-top:14px">근거: <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html">Spring Reference — Understanding the Declarative Transaction Implementation</a> (thread-bound, 새 스레드로 전파 안 됨) ·
+    <a style="color:var(--blue)" href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CompletableFuture.html">JDK CompletableFuture</a> (runAsync 기본 실행기 = ForkJoinPool.commonPool, join 시 CompletionException) ·
+    <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/TransactionSynchronizationManager.java">TransactionSynchronizationManager</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const C = { blue: '#5aa9ff', ok: '#3ecf8e', mid: '#f5b84a', cyan: '#4fd1d9', no: '#f2667a', violet: '#b58cff', dim: '#8b95a3' };
+const F = (t, c = '') => ({ t, c });
+const PX = F('OrderService 프록시 (try/catch)', 'px');
+const TOM = F('톰캣 → 컨트롤러');
+const ORD = F('order()', 'cur');
+const base = { sE: '대기', sW: '대기', mE: 'empty', mW: 'empty', kE: [], kW: [], c42: 'idle', c45: 'idle', db: { s: '10', o: '없음', p: '5000', t: '트랜잭션 없음' }, fut: '아직 없음' };
+const S = (o) => Object.assign({}, base, o);
+
+const common = [
+  S({ t: '요청이 들어와 톰캣이 exec-7을 배정', d: '이 요청은 exec-7이 처리합니다. worker-3은 공용 풀에서 쉬는 중이에요. <b>두 스레드 모두 자기 사물함과 자기 호출 스택</b>을 따로 갖고 있습니다.',
+     hl: ['tE'], sE: '실행 중', kE: [TOM] }),
+  S({ t: '프록시: conn#42 꺼냄 · autoCommit 끔 · exec-7 사물함에 바인딩', d: '트랜잭션이 시작됐습니다. conn#42는 <b>exec-7의 사물함에만</b> 들어갑니다.',
+     hl: ['lE', 'c42'], wires: [['c42', 'lE', C.mid, 'bindResource']], sE: '실행 중', mE: 'full', kE: [TOM, PX], c42: 'tx', db: { s: '10', o: '없음', p: '5000', t: 'conn#42 트랜잭션 열림' },
+     src: 'DataSourceTransactionManager.doBegin → setAutoCommit(false) → bindResource' }),
+  S({ t: '① StockRepository: exec-7 사물함에서 conn#42 → UPDATE', d: '같은 스레드라 사물함에서 conn#42를 꺼냅니다. 아직 커밋 전이에요.',
+     hl: ['bStock', 'lE'], wires: [['lE', 'bStock', C.ok, 'conn#42']], sE: '실행 중', mE: 'full', kE: [TOM, PX, ORD, F('stockRepository.decrease()', 'cur')], c42: 'tx', db: { s: '9 (미확정)', o: '없음', p: '5000', t: 'conn#42: UPDATE' } }),
+  S({ t: '② OrderRepository: 같은 conn#42 → INSERT', d: '①과 같은 커넥션, 같은 트랜잭션입니다.',
+     hl: ['bOrder', 'lE'], wires: [['lE', 'bOrder', C.ok, 'conn#42']], sE: '실행 중', mE: 'full', kE: [TOM, PX, ORD, F('orderRepository.save()', 'cur')], c42: 'tx', db: { s: '9 (미확정)', o: '1건 (미확정)', p: '5000', t: 'conn#42: UPDATE + INSERT' } }),
+  S({ t: '③ runAsync: 블록을 worker-3에게 넘기고 즉시 반환', d: 'runAsync는 블록을 <b>공용 풀의 작업 큐에 넣고</b> CompletableFuture를 돌려줄 뿐입니다. exec-7은 <b>기다리지 않고</b> 다음 줄로 갑니다.',
+     hl: ['future', 'tW'], wires: [['kE', 'future', C.mid, '작업 등록'], ['future', 'tW', C.violet, '큐 → worker-3']], sE: '실행 중', sW: '작업 받음', mE: 'full', kE: [TOM, PX, ORD, F('CompletableFuture.runAsync { }', 'cur')], c42: 'tx', db: { s: '9 (미확정)', o: '1건 (미확정)', p: '5000', t: 'conn#42: UPDATE + INSERT' }, fut: '⏳ 진행 중' }),
+];
+
+const modeA = [
+  S({ t: 'exec-7: order()가 정상 반환 → 프록시 commit', d: 'exec-7의 호출 스택에서 order()는 <b>예외 없이</b> 끝났습니다. 프록시가 보는 건 이것뿐이라 <b>commit</b>합니다. ①②가 확정되고 conn#42는 반납돼요.<br><span class="dim">※ 이 시점에 worker-3은 아직 시작도 안 했을 수 있습니다. 순서는 보장되지 않아요.</span>',
+     hl: ['kE', 'c42', 'db'], wires: [['kE', 'c42', C.ok, 'commit()']], sE: '응답 200 전송', sW: '작업 받음', mE: 'gone', kE: [TOM, F('OrderService 프록시 → commit()', 'px')], c42: 'idle', db: { s: '<b class="ok">9 확정</b>', o: '<b class="ok">1건 확정</b>', p: '5000', t: 'COMMIT ✅' }, fut: '⏳ 진행 중' }),
+  S({ t: 'worker-3: PointRepository가 자기 사물함을 엶 → 비어 있음', d: 'PointRepository는 <b>지금 자기를 부른 스레드(worker-3)의 사물함</b>을 엽니다. 비어 있으니 "트랜잭션 없음"으로 판단하고 풀에서 <b>새 커넥션 conn#45</b>(autoCommit=true)를 꺼내요.',
+     hl: ['lW', 'bPoint', 'c45'], wires: [['bPoint', 'lW', C.cyan, 'getResource → 없음'], ['c45', 'bPoint', C.no, '새 conn#45']], sE: '다음 요청 대기', sW: '실행 중', mE: 'empty', mW: 'empty', kW: [F('ForkJoinPool 실행 루프'), F('runAsync 블록'), F('pointRepository.use()', 'cur')], c45: 'new', db: { s: '9', o: '1건', p: '5000', t: 'conn#45: 트랜잭션 없음 (auto-commit)' }, fut: '⏳ 진행 중' }),
+  S({ t: 'worker-3: 💥 예외 → worker-3 스택에서만 올라가 Future에 담김', d: '예외는 <b>worker-3의 호출 스택</b>을 따라 올라가다 CompletableFuture 안에 저장됩니다. exec-7의 스택은 이미 비었고, 프록시는 이미 commit했어요. <b>아무도 이 Future를 꺼내 보지 않으면 로그도 없이 사라집니다.</b>',
+     hl: ['kW', 'future'], wires: [['kW', 'future', C.no, '예외 저장']], sE: '다음 요청 대기', sW: '종료', kW: [F('ForkJoinPool 실행 루프'), F('runAsync 블록'), F('pointRepository.use() 💥 PointNotEnough', 'boom')], c45: 'idle', db: { s: '9', o: '1건', p: '5000', t: '' }, fut: '❌ 예외가 담긴 채 방치' }),
+  S({ t: '최종: 재고는 줄고 주문은 생겼는데, 포인트는 그대로', d: '<b class="no">데이터 불일치.</b> 사용자는 200 응답을 받았고, 포인트 실패는 아무도 모릅니다.',
+     hl: ['db'], sE: '다음 요청 대기', sW: '대기', c45: 'idle', db: { s: '<b class="no">9</b>', o: '<b class="no">1건</b>', p: '<b class="ok">5000 (안 빠짐)</b>', t: '❌ ①② 커밋 · ③ 실패' }, fut: '❌ 예외가 담긴 채 방치' }),
+];
+
+const modeB = [
+  S({ t: 'exec-7: .join()에서 멈춰 기다림', d: '이번엔 exec-7이 <b>결과가 나올 때까지 기다립니다.</b> 트랜잭션은 아직 열려 있어요.',
+     hl: ['kE', 'future'], wires: [['kE', 'future', C.mid, 'join() 대기']], sE: 'WAITING', sW: '작업 받음', mE: 'full', kE: [TOM, PX, ORD, F('future.join()  ⏸', 'cur')], c42: 'tx', db: { s: '9 (미확정)', o: '1건 (미확정)', p: '5000', t: 'conn#42: UPDATE + INSERT' }, fut: '⏳ 진행 중' }),
+  S({ t: 'worker-3: 사물함 비어 있음 → 새 conn#45', d: '기다려 준다고 사물함이 공유되지는 않습니다. worker-3은 여전히 <b>트랜잭션 밖</b>에서 별도 커넥션으로 실행돼요.',
+     hl: ['lW', 'bPoint', 'c45'], wires: [['bPoint', 'lW', C.cyan, 'getResource → 없음'], ['c45', 'bPoint', C.no, '새 conn#45']], sE: 'WAITING', sW: '실행 중', mE: 'full', kE: [TOM, PX, ORD, F('future.join()  ⏸', 'cur')], kW: [F('ForkJoinPool 실행 루프'), F('runAsync 블록'), F('pointRepository.use()', 'cur')], c42: 'tx', c45: 'new', db: { s: '9 (미확정)', o: '1건 (미확정)', p: '5000', t: 'conn#42 열림 · conn#45 auto-commit' }, fut: '⏳ 진행 중' }),
+  S({ t: 'worker-3: 💥 예외 → Future에 담김 → join()이 exec-7에서 다시 던짐', d: 'join()은 담긴 예외를 <code>CompletionException</code>으로 감싸 <b>exec-7의 스택에서 다시 던집니다.</b> 이제 예외가 exec-7의 호출 스택을 타고 올라가요.',
+     hl: ['future', 'kE'], wires: [['kW', 'future', C.no, '예외 저장'], ['future', 'kE', C.no, 'CompletionException']], sE: '실행 중', sW: '종료', mE: 'full', kE: [TOM, PX, ORD, F('future.join() 💥 CompletionException', 'boom')], kW: [F('ForkJoinPool 실행 루프'), F('runAsync 블록'), F('pointRepository.use() 💥', 'boom')], c42: 'tx', db: { s: '9 (미확정)', o: '1건 (미확정)', p: '5000', t: 'conn#42 열림' }, fut: '❌ 예외 → join()으로 전달' }),
+  S({ t: '프록시 catch → conn#42.rollback()', d: '예외가 exec-7 스택으로 프록시까지 올라왔으니 <b>rollback</b>. ①②가 취소됩니다.<br><span class="dim">※ 단 ③은 conn#45였으므로 같은 트랜잭션이 아닙니다. ③이 무언가 커밋한 뒤 실패했다면 그건 남아요.</span>',
+     hl: ['kE', 'c42', 'db'], wires: [['kE', 'c42', C.no, 'rollback()']], sE: '500 응답', sW: '대기', mE: 'gone', kE: [TOM, F('OrderService 프록시 → rollback()', 'px')], c42: 'idle', db: { s: '<b class="ok">10</b>', o: '<b class="ok">없음</b>', p: '<b class="ok">5000</b>', t: 'ROLLBACK ✅ (①②만)' }, fut: '❌ 예외 → join()으로 전달' }),
+];
+
+let mode = 'A', i = 0;
+const steps = () => common.concat(mode === 'A' ? modeA : modeB);
+
+function lockerHtml(s) {
+  return s === 'full' ? '{ DataSource → <span class="chip">conn#42</span> }'
+    : s === 'gone' ? '{ <span class="chip gone">conn#42</span> } 비움' : '<span class="dim">{ } 비어 있음</span>';
+}
+function stackHtml(fr, label) {
+  return `<div class="lt">${label}</div>` + fr.slice().reverse().map(f => `<div class="frame ${f.c}">${f.t}</div>`).join('');
+}
+function render() {
+  const all = steps(), s = all[i];
+  document.querySelectorAll('.hl').forEach(e => e.classList.remove('hl'));
+  (s.hl || []).forEach(id => $(id) && $(id).classList.add('hl'));
+  $('sE').textContent = s.sE; $('sW').textContent = s.sW;
+  $('tW').classList.toggle('idle', s.sW === '대기' && i < 4);
+  $('mE').innerHTML = lockerHtml(s.mE); $('mW').innerHTML = lockerHtml(s.mW);
+  $('kE').innerHTML = stackHtml(s.kE, '📚 exec-7의 호출 스택 (위가 최신)');
+  $('kW').innerHTML = stackHtml(s.kW, '📚 worker-3의 호출 스택 (위가 최신)');
+  $('c42').className = 'conn' + (s.c42 === 'tx' ? ' out' : ''); $('c42ac').textContent = s.c42 === 'tx' ? 'exec-7 · AC=false' : '대기';
+  $('c45').className = 'conn' + (s.c45 === 'new' ? ' hlno' : ''); $('c45ac').textContent = s.c45 === 'new' ? 'worker-3 · AC=true' : '대기';
+  if ((s.hl || []).includes('c42')) $('c42').classList.add('hl');
+  $('dStock').innerHTML = s.db.s; $('dOrder').innerHTML = s.db.o; $('dPoint').innerHTML = s.db.p; $('dbtxt').textContent = s.db.t;
+  $('futTxt').textContent = s.fut;
+  $('joinCode').style.display = mode === 'B' ? 'inline' : 'none';
+  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${all.length}${mode === 'B' ? ' · .join() 버전' : ''}</div><div class="title">${s.t}</div><div>${s.d}</div>` + (s.src ? `<div class="src">스프링 코드: ${s.src}</div>` : '');
+  $('prev').disabled = i === 0; $('next').disabled = i === all.length - 1;
+  $('dots').innerHTML = all.map((_, k) => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
+  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+  requestAnimationFrame(() => drawWires(s.wires || []));
+}
+function drawWires(ws) {
+  const svg = $('wires'), st = $('stage').getBoundingClientRect();
+  svg.querySelectorAll('g').forEach(g => g.remove());
+  ws.forEach(([a, b, color, label], n) => {
+    const A = $(a).getBoundingClientRect(), B = $(b).getBoundingClientRect();
+    const ac = { x: A.left + A.width / 2 - st.left, y: A.top + A.height / 2 - st.top };
+    const bc = { x: B.left + B.width / 2 - st.left, y: B.top + B.height / 2 - st.top };
+    const edge = (R, from, to) => {
+      const cx = R.left + R.width / 2 - st.left, cy = R.top + R.height / 2 - st.top, dx = to.x - from.x, dy = to.y - from.y;
+      const k = Math.min(dx === 0 ? Infinity : (R.width / 2) / Math.abs(dx), dy === 0 ? Infinity : (R.height / 2) / Math.abs(dy));
+      return { x: cx + dx * k, y: cy + dy * k };
+    };
+    const p1 = edge(A, ac, bc), p2 = edge(B, bc, ac);
+    const off = (n % 2 ? -1 : 1) * (ws.length > 1 ? 16 : 0);
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2 + off;
+    const w = label.length * 7.4 + 14;
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.innerHTML = `<path d="M${p1.x},${p1.y} Q${mx},${my - 30} ${p2.x},${p2.y}" stroke="${color}" stroke-width="2.5" fill="none" marker-end="url(#ah)" stroke-dasharray="6 4"><animate attributeName="stroke-dashoffset" from="20" to="0" dur="0.6s" repeatCount="indefinite"/></path>
+      <rect x="${mx - w / 2}" y="${my - 31}" width="${w}" height="20" rx="6" fill="#0f1419" stroke="${color}"/>
+      <text x="${mx}" y="${my - 17}" fill="${color}" font-size="12" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">${label}</text>`;
+    svg.appendChild(g);
+  });
+}
+function setMode(m) { mode = m; $('mA').classList.toggle('on', m === 'A'); $('mB').classList.toggle('on', m === 'B'); if (i >= steps().length) i = steps().length - 1; render(); }
+$('next').onclick = () => { i++; render(); };
+$('prev').onclick = () => { i--; render(); };
+$('mA').onclick = () => setMode('A');
+$('mB').onclick = () => setMode('B');
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' && i < steps().length - 1) { i++; render(); }
+  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+});
+window.addEventListener('resize', render);
+render();
+</script>
+</body>
+</html>
