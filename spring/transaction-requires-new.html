@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQUIRES_NEW: 예외 전파 vs 트랜잭션 전파 · 커넥션 2개 · 풀 데드락</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9; --orange: #ff9f5a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13.5px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; font-size: 14px; }
+  .card.no { border-color: var(--no); } .card.ok { border-color: var(--ok); } .card.mid { border-color: var(--mid); }
+  .card .t { font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .warn { border-left: 4px solid var(--no); background: #2c1a1e; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+
+  /* 두 개의 전파 */
+  .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .vs .card h3 { margin: 0 0 6px; font-size: 16px; }
+
+  /* 스텝 무대 */
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .modes button.on { border-color: var(--mid); background: #2a2416; }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 230px; gap: 18px; }
+  .lane-t { font-size: 12.5px; color: var(--dim); margin-bottom: 8px; font-weight: 700; }
+  .lane-t b { color: var(--text); }
+  .stack { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: #11161c; min-height: 300px; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; }
+  .stack .lt { font-size: 12px; color: var(--dim); margin-bottom: auto; }
+  .frame { padding: 6px 10px; border-radius: 7px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .frame.px1 { background: #1b2a40; color: var(--blue); }
+  .frame.px2 { background: #2a2140; color: var(--violet); }
+  .frame.cur { outline: 2px solid var(--blue); }
+  .frame.boom { outline: 2px solid var(--no); background: #3a1a22; color: var(--no); font-weight: 700; }
+  .frame.catch { outline: 2px solid var(--mid); background: #2a2416; color: var(--mid); }
+  .frame .ex { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; padding: 0 7px; border-radius: 99px; background: var(--no); color: #0f1419; font-weight: 700; }
+
+  .tx { display: grid; gap: 10px; }
+  .locker { border: 2px solid var(--mid); border-radius: 12px; padding: 10px 12px; background: #221e12; }
+  .locker .t, .shelf .t { font-weight: 700; font-size: 13.5px; }
+  .locker .t { color: var(--mid); }
+  .shelf { border: 2px dashed var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; transition: all .25s; }
+  .shelf.on { border-color: var(--violet); background: #1f1a2c; }
+  .shelf .t { color: var(--violet); }
+  .phys { border: 2px solid var(--ok); border-radius: 12px; padding: 9px 12px; background: #11201a; font-size: 13.5px; transition: all .25s; }
+  .phys .h { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
+  .phys .h .st { font-size: 12px; padding: 0 8px; border-radius: 99px; background: #0f1419; font-weight: 600; white-space: nowrap; }
+  .phys.p2 { border-color: var(--violet); background: #1f1a2c; }
+  .phys.flag { border-color: var(--no); background: #2c1a1e; }
+  .phys.done-ok { opacity: .85; }
+  .phys.done-rb { border-style: dashed; opacity: .75; }
+  .phys.susp { opacity: .55; border-style: dashed; }
+  .logic { margin-top: 6px; padding: 4px 9px; border-radius: 7px; font-size: 12.5px; }
+  .logic.l1 { background: #1b2a40; color: var(--blue); }
+  .logic.l2 { background: #2a2140; color: var(--violet); }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 99px; background: #183a2b; color: var(--ok); font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; margin: 2px 4px 2px 0; }
+  .chip.v { background: #2a2140; color: var(--violet); }
+  .chip.x { background: #252d38; color: var(--dim); text-decoration: line-through; }
+
+  .meter { border: 2px solid var(--line); border-radius: 12px; padding: 12px; background: #141a21; text-align: center; }
+  .meter .n { font-size: 44px; font-weight: 800; line-height: 1.1; }
+  .meter .l { font-size: 12.5px; color: var(--dim); }
+  .pool { margin-top: 10px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .slot { padding: 6px 0; border-radius: 6px; background: #1e2630; border: 1px solid var(--line); font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; text-align: center; }
+  .slot.a { background: #183a2b; color: var(--ok); border-color: var(--ok); }
+  .slot.b { background: #2a2140; color: var(--violet); border-color: var(--violet); }
+  .db { margin-top: 10px; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; font-size: 13px; text-align: left; }
+  .db .r { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed var(--line); }
+  .db .r:last-child { border-bottom: none; }
+
+  .ctrl { display: flex; gap: 10px; align-items: center; margin: 16px 0 12px; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  button:disabled { opacity: .4; cursor: default; }
+  .dots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dot { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; cursor: pointer; }
+  .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
+  .narr { border: 1px solid var(--line); border-radius: 12px; background: #141a21; padding: 14px 16px; min-height: 110px; }
+  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .narr .title { font-size: 17px; font-weight: 700; margin: 2px 0 6px; }
+  .narr .src { margin-top: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--dim); }
+
+  /* 시뮬레이터 */
+  .simctl { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .simctl label { font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  .simctl input[type=range] { width: 160px; }
+  .simctl .v { font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: var(--mid); min-width: 24px; display: inline-block; }
+  .simgrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; }
+  .reqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+  .req { border: 2px solid var(--line); border-radius: 10px; padding: 7px 9px; background: #141a21; font-size: 12.5px; transition: all .2s; }
+  .req .rn { font-family: ui-monospace, Menlo, monospace; font-weight: 700; }
+  .req .rs { margin-top: 3px; }
+  .req.w1 { border-color: var(--line); }
+  .req.h1 { border-color: var(--ok); }
+  .req.w2 { border-color: var(--no); background: #2c1a1e; }
+  .req.h2 { border-color: var(--violet); background: #1f1a2c; }
+  .req.done { opacity: .4; }
+  .req.fail { border-color: var(--no); background: #3a1a22; }
+  .simpool { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .simbox { border: 2px solid var(--line); border-radius: 12px; padding: 12px; background: #141a21; }
+  .verdict { margin-top: 10px; font-weight: 700; font-size: 15px; }
+  .formula { margin-top: 10px; font-size: 13.5px; }
+  @media (max-width: 960px) { .two, .vs, .stage, .simgrid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>REQUIRES_NEW: 예외 전파 vs 트랜잭션 전파 · 커넥션 2개 · 풀 데드락</h1>
+  <div class="sub">2026-10-14 모의면접 꼬리질문 10</div>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">1</span>질문 · 내 답 · 판정</h2>
+<pre><code>@Service
+class PointService {
+    <span style="color:#b58cff">@Transactional(propagation = Propagation.REQUIRES_NEW)</span>
+    fun use(userId: Long, amount: Int) { throw PointNotEnoughException() }   <span class="dim">// RuntimeException</span>
+}
+
+@Service
+class OrderService(...) {
+    <span style="color:#5aa9ff">@Transactional</span>
+    fun order(userId: Long, productId: Long) {
+        stockRepository.decrease(productId)          <span class="dim">// ①</span>
+        orderRepository.save(Order(...))             <span class="dim">// ②</span>
+        try { pointService.use(userId, 1000) }       <span class="dim">// ③</span>
+        catch (e: PointNotEnoughException) { log.warn("포인트 부족") }
+    }
+}</code></pre>
+    <p style="margin:12px 0 6px"><b>Q1.</b> ①②는 어떻게 되나? &nbsp; <b>Q2.</b> use() 실행 중 커넥션은 몇 개? 트래픽이 몰리면?</p>
+    <div class="card" style="margin-bottom:12px"><div class="t">내 답변 (원문)</div>"1,2 는 해당 메소드가 오류가 나도 커밋이 될거야. 왜냐하면 Propagation.REQUIRES_NEW 여서 예외 전파가 안돼. use가 실행되는동안 커넥션을 1개를 쥐고있을거같아. 트래픽이 몰리면 그만큼 풀에서 커넥션을 더 꺼내서 쓰니까 좀 커넥션 풀이 꽉찰 위험이 있지 않을까 생각드는데"</div>
+    <table>
+      <tr><th>내 답</th><th>판정</th><th>정답</th></tr>
+      <tr><td>①② commit</td><td class="ok">✅ 결론 맞음</td><td>commit</td></tr>
+      <tr><td>"예외 전파가 안 돼서"</td><td class="no">❌ 근거 틀림</td><td>예외는 <b>전파된다</b>. 달라진 건 <b>트랜잭션이 분리</b>된 것 → 아래 ②③</td></tr>
+      <tr><td>커넥션 1개</td><td class="no">❌</td><td><b>2개</b>. 바깥 커넥션을 반납하지 않고 쥔 채로 하나 더 → 아래 ③</td></tr>
+      <tr><td>"풀이 꽉 찰 위험"</td><td class="mid">🟡 방향만</td><td>서로 기다리다 <b>전원이 멈추는 풀 데드락</b> → 아래 ④</td></tr>
+    </table>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">2</span>"Propagation"은 예외가 아니라 <u>트랜잭션</u>의 전파</h2>
+    <div class="vs">
+      <div class="card" style="border-color:var(--no)">
+        <h3 class="no">예외 전파 (exception)</h3>
+        <div class="dim" style="font-size:13px">층: <b style="color:var(--text)">JVM 호출 스택</b></div>
+        예외가 <b>호출한 쪽으로 위로 올라가는 것</b>. <code>throw</code> → 위 프레임 → … → 누가 <code>catch</code>하면 멈춤.<br>
+        <b>전파 속성과 무관하게 항상 일어납니다.</b> REQUIRES_NEW여도 use()의 예외는 order()까지 올라와요. 그래서 order()의 catch가 잡을 수 있는 거고요.
+      </div>
+      <div class="card" style="border-color:var(--ok)">
+        <h3 class="ok">트랜잭션 전파 (Propagation)</h3>
+        <div class="dim" style="font-size:13px">층: <b style="color:var(--text)">스프링 트랜잭션 · DB 커넥션</b></div>
+        이미 트랜잭션이 있을 때 <b>안쪽 @Transactional이 그걸 이어 쓸지, 새로 만들지</b>.<br>
+        REQUIRED = 이어 씀(물리 1개) · REQUIRES_NEW = 새로 만듦(물리 2개).<br>
+        <b>예외가 어디로 가는지는 바꾸지 않습니다.</b> 예외가 났을 때 <b>무엇이 롤백되는지</b>를 바꿔요.
+      </div>
+    </div>
+    <div class="key">이번 답의 오류는 두 "전파"를 섞은 것 = <b>층 혼동</b>. "Propagation"이 보이면 <b>"트랜잭션이 어떻게 이어지나"</b>로 읽으세요.</div>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="num">3</span>단계별 비교 — 호출 스택 · 트랜잭션 · 커넥션 수를 한 화면에</h2>
+    <div class="modes">
+      <button data-m="NEW" class="on">REQUIRES_NEW + catch (질문 상황)</button>
+      <button data-m="REQ">REQUIRED + catch (꼬리질문 9)</button>
+      <button data-m="NOCATCH">REQUIRES_NEW + catch 없음 (예외가 전파된다는 증거)</button>
+    </div>
+    <div class="stage">
+      <div>
+        <div class="lane-t">📚 <b>호출 스택</b> — 예외 전파 (JVM)</div>
+        <div class="stack" id="stk"></div>
+      </div>
+      <div>
+        <div class="lane-t">🔀 <b>트랜잭션</b> — 트랜잭션 전파 (스프링)</div>
+        <div class="tx" id="tx"></div>
+      </div>
+      <div>
+        <div class="lane-t">🔌 <b>이 요청이 쥔 커넥션</b></div>
+        <div class="meter"><div class="n" id="held">0</div><div class="l">개</div>
+          <div class="pool" id="pool"></div></div>
+        <div class="db" id="db"></div>
+      </div>
+    </div>
+    <div class="ctrl">
+      <button id="prev">◀ 이전</button>
+      <button id="next" class="primary">다음 ▶</button>
+      <div class="dots" id="dots"></div>
+    </div>
+    <div class="narr" id="narr"></div>
+    <table style="margin-top:16px">
+      <tr><th></th><th>REQUIRED</th><th>REQUIRES_NEW</th></tr>
+      <tr><td>물리 트랜잭션</td><td>1개 (참여)</td><td>2개 (바깥은 <b>일시 중단</b>)</td></tr>
+      <tr><td>안쪽 예외 시 안쪽이 하는 일</td><td>손님 → 🚩 rollback-only 표시만</td><td>주인 → <b>자기 것만 진짜 rollback</b></td></tr>
+      <tr><td>바깥이 catch하면 ①②</td><td class="no">rollback + UnexpectedRollbackException</td><td class="ok">commit</td></tr>
+      <tr><td>바깥이 catch 안 하면 ①②</td><td class="no">rollback</td><td class="no">rollback (예외가 바깥 프록시까지 전파)</td></tr>
+      <tr><td>use() 동안 커넥션</td><td>1개</td><td class="no"><b>2개</b></td></tr>
+    </table>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <h2><span class="num">4</span>풀 데드락 시뮬레이터 — 요청마다 커넥션 2개가 필요하면</h2>
+    <div class="dim" style="margin-bottom:12px;font-size:14px">모든 요청이 동시에 order()에 들어온 <b>최악의 경우</b>. 각 요청은 ① 바깥 커넥션 1개를 쥔 채 ② REQUIRES_NEW용 1개를 더 받아야 끝납니다.</div>
+    <div class="simctl">
+      <label>커넥션 풀 크기 <input type="range" id="pSize" min="2" max="20" value="10"><span class="v" id="pSizeV">10</span></label>
+      <label>동시 요청 수 <input type="range" id="nReq" min="1" max="20" value="10"><span class="v" id="nReqV">10</span></label>
+      <button id="simPrev">◀</button><button id="simNext" class="primary">다음 라운드 ▶</button><button id="simReset">처음부터</button>
+    </div>
+    <div class="simgrid">
+      <div><div class="reqs" id="reqs"></div></div>
+      <div>
+        <div class="simbox">
+          <div style="font-weight:700;margin-bottom:6px">커넥션 풀</div>
+          <div class="simpool" id="simpool"></div>
+          <div class="verdict" id="simV"></div>
+          <div class="dim" style="font-size:13px;margin-top:4px" id="simD"></div>
+        </div>
+        <div class="formula card" id="formula"></div>
+      </div>
+    </div>
+    <div class="warn">실제 장애 모습: 평소엔 멀쩡하다가 <b>피크 때만</b> 모든 요청이 HikariCP <code>connectionTimeout</code>(기본 30초) 동안 멈췄다가<br>
+    <code>SQLTransientConnectionException: Connection is not available, request timed out after 30000ms</code> 로 한꺼번에 실패합니다.</div>
+    <table>
+      <tr><th>대응</th><th>내용</th></tr>
+      <tr><td>풀 크기 공식</td><td><b>풀 ≥ Tn × (Cm − 1) + 1</b> (Tn = 동시 스레드 수, Cm = 한 스레드가 동시에 쥐는 최대 커넥션 수)</td></tr>
+      <tr><td>구조 변경</td><td>바깥이 <b>커밋된 뒤</b> 처리: <code>@TransactionalEventListener(phase = AFTER_COMMIT)</code> 등</td></tr>
+      <tr><td>남발 금지</td><td>REQUIRES_NEW는 감사 로그처럼 <b>꼭 독립적으로 남아야 하는 것</b>에만</td></tr>
+    </table>
+    <div class="say">면접용: <b>"REQUIRES_NEW는 바깥 트랜잭션을 일시 중단하고 새 커넥션으로 독립 트랜잭션을 열기 때문에 안쪽 롤백이 바깥에 영향을 주지 않습니다. 대신 한 요청이 커넥션을 두 개 쥐게 되어, 동시 요청이 풀 크기에 닿으면 서로 커넥션을 기다리는 풀 데드락이 생길 수 있습니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html">Spring Reference — Transaction Propagation</a> (REQUIRES_NEW: 독립 물리 트랜잭션, 바깥은 suspend) ·
+      <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java">AbstractPlatformTransactionManager</a> (handleExistingTransaction → suspend → startTransaction / resume) ·
+      <a style="color:var(--blue)" href="https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing">HikariCP — About Pool Sizing (Pool-locking)</a> ·
+      <a style="color:var(--blue)" href="https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby">HikariCP connectionTimeout</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const F = (t, c = '', ex = '') => ({ t, c, ex });
+const TOM = F('톰캣 → 컨트롤러');
+/* tx 상태: locker(문자열), shelf(문자열|null), phys[] {name, conn, role, st, cls, logic[]} */
+const P1 = (st, cls = '', logic = ['l1']) => ({ name: '물리 #1', conn: 'conn#42', st, cls, logic });
+const P2 = (st, cls = 'p2') => ({ name: '물리 #2', conn: 'conn#43', st, cls, logic: ['l2'] });
+const L = { l1: '논리 · order() (주인)', l2: '논리 · use()', l2g: '논리 · use() (손님)', l2o: '논리 · use() (주인)' };
+const DB0 = { s: '10', o: '없음' }, DBU = { s: '9 (미확정)', o: '1건 (미확정)' };
+
+const base0 = [
+  { t: 'order() 프록시 진입 → 새 물리 트랜잭션 (conn#42)', d: '사물함이 비어 있으니 주인이 되어 conn#42를 꺼내 바인딩합니다.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()', 'cur')], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['a'], db: DB0 },
+  { t: '① ② 실행 (conn#42)', d: 'UPDATE, INSERT. 아직 커밋 전입니다.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  ① ②  try {', 'cur')], locker: 'conn#42', shelf: null, phys: [P1('진행 중')], held: ['a'], db: DBU },
+];
+
+const NEW = base0.concat([
+  { t: '⭐ use() 프록시 진입 → 사물함에 있음 → REQUIRES_NEW → 바깥을 <b>일시 중단(suspend)</b>', d: 'conn#42를 사물함에서 <b>빼서 보관함으로</b> 옮깁니다. <b>반납이 아닙니다.</b> conn#42의 트랜잭션(①②)은 아직 끝나지 않았으니 풀로 돌려보낼 수 없어요.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (REQUIRES_NEW)', 'px2')], locker: '', shelf: 'conn#42', phys: [P1('일시 중단', 'susp')], held: ['a'], db: DBU,
+    src: 'handleExistingTransaction(): PROPAGATION_REQUIRES_NEW → suspend(transaction)' },
+  { t: '⭐ 새 커넥션 conn#43으로 물리 #2 시작 → <b>이 요청이 2개를 쥠</b>', d: '사물함이 비었으니 처음처럼 풀에서 하나를 더 꺼내 새 물리 트랜잭션을 엽니다. use()는 <b>물리 #2의 주인</b>이에요. 오른쪽 숫자가 <b>2</b>가 되는 순간이 풀 데드락의 씨앗입니다.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (주인)', 'px2'), F('use()', 'cur')], locker: 'conn#43', shelf: 'conn#42', phys: [P1('일시 중단', 'susp'), P2('진행 중')], held: ['a', 'b'], db: DBU,
+    src: 'startTransaction() → doBegin(): getConnection() → setAutoCommit(false) → bindResource' },
+  { t: 'use()에서 💥 PointNotEnoughException', d: '예외가 use() 프레임에서 생겼습니다.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (주인)', 'px2'), F('use()', 'boom', '💥')], locker: 'conn#43', shelf: 'conn#42', phys: [P1('일시 중단', 'susp'), P2('진행 중')], held: ['a', 'b'], db: DBU },
+  { t: '⭐ 안쪽 프록시: 주인이니 <b>자기 것(conn#43)만</b> 진짜 rollback → 반납 → 바깥 복원(resume)', d: '물리 #2만 롤백됩니다. 물리 #1에는 <b>아무 표시도 안 남아요</b> (REQUIRED와의 차이). conn#43은 반납, conn#42는 사물함으로 돌아옵니다. 그리고 <b>예외는 그대로 위로 던져요 — 예외 전파.</b>',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 → rollback · throw', 'boom', '💥↑')], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 done-rb')], held: ['a'], db: DBU,
+    src: 'completeTransactionAfterThrowing() → rollback(conn#43) → cleanup → resume(suspended)' },
+  { t: 'order()의 catch가 예외를 잡음', d: '예외가 order()까지 <b>올라왔기 때문에</b> catch가 잡을 수 있습니다. "예외 전파가 안 된다"면 이 catch는 아무것도 못 잡아요.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  catch → log.warn', 'catch', '잡음')], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 done-rb')], held: ['a'], db: DBU },
+  { t: '바깥 프록시: 예외 없음 + 🚩 없음 → conn#42.commit() ✅', d: '<b>①② commit.</b> 결론은 내 답과 같지만 이유는 "예외가 안 와서"가 아니라 <b>"트랜잭션이 분리돼 있어서 안쪽 롤백이 바깥에 영향을 안 줘서"</b>입니다.',
+    stack: [TOM, F('OrderService 프록시 → commit', 'px1')], locker: '', shelf: null, phys: [P1('COMMIT', 'done-ok'), P2('ROLLBACK', 'p2 done-rb')], held: [], db: { s: '<b class="ok">9 확정</b>', o: '<b class="ok">1건 확정</b>' } },
+]);
+
+const REQ = base0.concat([
+  { t: 'use() 프록시 진입 → 사물함에 있음 → REQUIRED → 참여', d: '새 커넥션을 꺼내지 않습니다. 같은 conn#42, 같은 물리 트랜잭션에 <b>손님</b>으로 들어가요.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (손님)', 'px2')], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', ['l1', 'l2g'])], held: ['a'], db: DBU },
+  { t: '커넥션 추가 없음', d: '이 요청은 계속 <b>1개</b>만 쥡니다.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (손님)', 'px2'), F('use()', 'cur')], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', ['l1', 'l2g'])], held: ['a'], db: DBU },
+  { t: 'use()에서 💥', d: '',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 (손님)', 'px2'), F('use()', 'boom', '💥')], locker: 'conn#42', shelf: null, phys: [P1('진행 중', '', ['l1', 'l2g'])], held: ['a'], db: DBU },
+  { t: '안쪽 프록시: 손님이라 rollback 못 함 → 공유 물리 #1에 🚩', d: '같은 물리 트랜잭션이라 깃발이 ①②까지 덮습니다. 예외는 위로 전파.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  try {'), F('PointService 프록시 → 🚩 · throw', 'boom', '💥↑')], locker: 'conn#42 🚩', shelf: null, phys: [P1('🚩 rollback-only', 'flag', ['l1', 'l2g'])], held: ['a'], db: DBU },
+  { t: 'order()의 catch가 잡음', d: '예외는 사라졌지만 깃발은 남아 있습니다.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()  catch → log.warn', 'catch', '잡음')], locker: 'conn#42 🚩', shelf: null, phys: [P1('🚩 rollback-only', 'flag')], held: ['a'], db: DBU },
+  { t: '바깥 프록시: commit하려다 🚩 → 전체 rollback + UnexpectedRollbackException', d: '<b>①② rollback.</b> 같은 코드인데 전파 속성 하나로 결과가 정반대입니다.',
+    stack: [TOM, F('OrderService 프록시 → 🚩 rollback', 'boom', '500')], locker: '', shelf: null, phys: [P1('ROLLBACK', 'flag done-rb')], held: [], db: { s: '<b class="no">10 (취소)</b>', o: '<b class="no">없음 (취소)</b>' } },
+]);
+
+const NOCATCH = NEW.slice(0, 5).map(s => Object.assign({}, s, { stack: s.stack.map(f => f.t.startsWith('order()  try') ? F('order()  (catch 없음)') : f) })).concat([
+  { t: 'order()에 catch가 없음 → 예외가 계속 위로', d: '<b>예외는 전파됩니다.</b> order() 프레임을 지나 바깥 프록시까지 올라가요.',
+    stack: [TOM, F('OrderService 프록시', 'px1'), F('order()', 'boom', '💥↑')], locker: 'conn#42', shelf: null, phys: [P1('진행 중'), P2('ROLLBACK · 반납', 'p2 done-rb')], held: ['a'], db: DBU },
+  { t: '바깥 프록시가 예외를 받음 → conn#42.rollback() → ①②도 취소', d: 'REQUIRES_NEW여도 바깥이 예외를 못 잡으면 바깥도 롤백됩니다. <b>"REQUIRES_NEW라서 예외 전파가 안 된다"가 틀린 이유</b>가 바로 이 화면이에요.',
+    stack: [TOM, F('OrderService 프록시 → rollback', 'boom', '500')], locker: '', shelf: null, phys: [P1('ROLLBACK', 'done-rb'), P2('ROLLBACK', 'p2 done-rb')], held: [], db: { s: '<b class="no">10 (취소)</b>', o: '<b class="no">없음 (취소)</b>' } },
+]);
+
+const MODES = { NEW, REQ, NOCATCH };
+let mode = 'NEW', i = 0;
+function renderTx(s) {
+  const lk = `<div class="locker"><div class="t">🔒 exec-7 사물함 (지금 바인딩된 것)</div>${s.locker ? `<span class="chip ${s.locker.includes('43') ? 'v' : ''}">${s.locker}</span>` : '<span class="dim" style="font-size:13px">{ } 비어 있음</span>'}</div>`;
+  const sh = `<div class="shelf ${s.shelf ? 'on' : ''}"><div class="t">⏸ 일시 중단 보관함 (suspend)</div>${s.shelf ? `<span class="chip">${s.shelf}</span><span style="font-size:12.5px">반납 안 됨 · 트랜잭션 유지</span>` : '<span class="dim" style="font-size:13px">비어 있음</span>'}</div>`;
+  const ph = s.phys.map(p => `<div class="phys ${p.cls}"><div class="h"><span>${p.name} · ${p.conn}</span><span class="st">${p.st}</span></div>${p.logic.map(l => `<div class="logic ${l.startsWith('l2') ? 'l2' : 'l1'}">${L[l]}</div>`).join('')}</div>`).join('');
+  return lk + sh + ph;
+}
+function render() {
+  const all = MODES[mode], s = all[i];
+  $('stk').innerHTML = '<div class="lt">위가 최신 · 예외는 아래 방향(호출한 쪽)으로 전파</div>' + s.stack.slice().reverse().map(f => `<div class="frame ${f.c}">${f.t}${f.ex ? `<span class="ex">${f.ex}</span>` : ''}</div>`).join('');
+  $('tx').innerHTML = renderTx(s);
+  $('held').textContent = s.held.length;
+  $('held').style.color = s.held.length >= 2 ? 'var(--no)' : s.held.length ? 'var(--ok)' : 'var(--dim)';
+  const slots = ['#42', '#43', '#44', '#45'];
+  $('pool').innerHTML = slots.map((n, k) => `<div class="slot ${k === 0 && s.held.includes('a') ? 'a' : k === 1 && s.held.includes('b') ? 'b' : ''}">${n}</div>`).join('');
+  $('db').innerHTML = `<div class="r"><span>① 재고</span><span>${s.db.s}</span></div><div class="r"><span>② 주문</span><span>${s.db.o}</span></div>`;
+  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${all.length}</div><div class="title">${s.t}</div><div>${s.d}</div>` + (s.src ? `<div class="src">스프링 코드: ${s.src}</div>` : '');
+  $('prev').disabled = i === 0; $('next').disabled = i === all.length - 1;
+  $('dots').innerHTML = all.map((_, k) => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
+  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+}
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m; i = Math.min(i, MODES[mode].length - 1);
+  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); render();
+});
+$('next').onclick = () => { i++; render(); };
+$('prev').onclick = () => { i--; render(); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight' && i < MODES[mode].length - 1) { i++; render(); }
+  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+});
+render();
+
+/* 4. 시뮬레이터 */
+function simulate(P, N) {
+  // 요청 상태: w1(첫 커넥션 대기) h1(1개 쥠) w2(2번째 대기) h2(2개 쥠) done fail
+  const st = Array(N).fill('w1'); let free = P; const rounds = [];
+  const snap = (title, desc, verdict) => rounds.push({ st: st.slice(), free, title, desc, verdict });
+  snap('라운드 0 · 요청 도착', `요청 ${N}개가 동시에 order()로 들어옵니다.`, '');
+  let guard = 0;
+  while (st.some(x => x !== 'done') && guard++ < 50) {
+    // 1) 첫 커넥션 배분
+    let got1 = 0;
+    for (let k = 0; k < N && free > 0; k++) if (st[k] === 'w1') { st[k] = 'h1'; free--; got1++; }
+    if (got1) snap('바깥 커넥션 배분', `${got1}개 요청이 order()용 커넥션을 받아 ①② 실행. 남은 풀 ${free}개.`, '');
+    // 2) 쥔 요청들이 2번째를 원함
+    st.forEach((x, k) => { if (x === 'h1') st[k] = 'w2'; });
+    let got2 = 0;
+    for (let k = 0; k < N && free > 0; k++) if (st[k] === 'w2') { st[k] = 'h2'; free--; got2++; }
+    const waiting2 = st.filter(x => x === 'w2').length;
+    if (got2 === 0 && waiting2 > 0) {
+      snap('use() 진입 · REQUIRES_NEW', `${waiting2}개 요청이 2번째 커넥션을 기다리는데 풀에 <b>0개</b>. 반납하려면 use()를 끝내야 하고, use()를 하려면 커넥션이 있어야 함.`, 'dead');
+      st.forEach((x, k) => { if (x === 'w2' || x === 'w1') st[k] = 'fail'; });
+      snap('30초 후 · connectionTimeout', '아무도 진행하지 못해 모두 타임아웃으로 실패합니다.', 'dead');
+      return rounds;
+    }
+    snap('use() 진입 · REQUIRES_NEW', `${got2}개 요청이 2번째 커넥션을 받음.${waiting2 ? ` ${waiting2}개는 대기.` : ''}`, '');
+    // 3) 2개 쥔 요청 완료 → 2개 반납
+    let fin = 0;
+    st.forEach((x, k) => { if (x === 'h2') { st[k] = 'done'; free += 2; fin++; } });
+    snap('완료 · 반납', `${fin}개 요청이 끝나 커넥션 ${fin * 2}개 반납. 남은 풀 ${free}개.`, '');
+    // 대기 중 w2는 다음 라운드에서 2번째 받도록 h1로 되돌림
+    st.forEach((x, k) => { if (x === 'w2') st[k] = 'h1'; });
+    if (st.every(x => x === 'done')) { snap('끝', '모든 요청이 성공했습니다.', 'ok'); return rounds; }
+    // h1인 요청은 다음 루프에서 w2로 감 (첫 배분 단계는 w1만)
+  }
+  return rounds;
+}
+let R = [], ri = 0;
+function simRender() {
+  const P = +$('pSize').value, N = +$('nReq').value, r = R[ri];
+  const label = { w1: '⏳ 1번째 대기', h1: '🔌 1개 쥠', w2: '🔌 1개 쥠 · ⏳ 2번째 대기', h2: '🔌🔌 2개 쥠', done: '✅ 완료', fail: '❌ 타임아웃' };
+  $('reqs').innerHTML = r.st.map((x, k) => `<div class="req ${x}"><div class="rn">요청 ${k + 1}</div><div class="rs">${label[x]}</div></div>`).join('');
+  const used = P - r.free;
+  $('simpool').innerHTML = Array.from({ length: P }, (_, k) => `<div class="slot ${k < used ? 'a' : ''}">${k < used ? '사용' : '빈'}</div>`).join('');
+  $('simV').innerHTML = `<span class="dim" style="font-size:13px">${ri + 1}/${R.length} · </span>${r.title}`;
+  $('simV').style.color = r.verdict === 'dead' ? 'var(--no)' : r.verdict === 'ok' ? 'var(--ok)' : '';
+  $('simD').innerHTML = r.desc;
+  const need = N * (2 - 1) + 1;
+  $('formula').innerHTML = `공식 <b>풀 ≥ Tn × (Cm − 1) + 1</b><br>= ${N} × (2 − 1) + 1 = <b>${need}</b><br>현재 풀 <b>${P}</b> → ${P >= need ? '<span class="ok">✅ 데드락 없음</span>' : '<span class="no">❌ 최악의 경우 데드락</span>'}`;
+  $('simPrev').disabled = ri === 0; $('simNext').disabled = ri === R.length - 1;
+}
+function simReset() { $('pSizeV').textContent = $('pSize').value; $('nReqV').textContent = $('nReq').value; R = simulate(+$('pSize').value, +$('nReq').value); ri = 0; simRender(); }
+$('pSize').oninput = simReset; $('nReq').oninput = simReset; $('simReset').onclick = simReset;
+$('simNext').onclick = () => { ri++; simRender(); };
+$('simPrev').onclick = () => { ri--; simRender(); };
+simReset();
+</script>
+</body>
+</html>
