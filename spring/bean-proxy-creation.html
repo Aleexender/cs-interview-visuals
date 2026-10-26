@@ -7,11 +7,11 @@
 <style>
   :root {
     --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
-    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
-  main { max-width: 1200px; margin: 0 auto; padding: 32px 20px 80px; }
+  main { max-width: 1280px; margin: 0 auto; padding: 32px 20px 80px; }
   h1 { font-size: 24px; margin: 0 0 6px; }
   .sub { color: var(--dim); margin-bottom: 22px; }
   section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
@@ -30,235 +30,339 @@
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
   th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
   th { color: var(--dim); font-weight: 500; font-size: 13px; }
-  button { font: inherit; padding: 8px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button { font: inherit; padding: 10px 20px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
   button.primary { border-color: var(--blue); background: #1b2a40; }
   button:disabled { opacity: .4; cursor: default; }
 
-  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-  .modes button.on { border-color: var(--mid); background: #2a2416; }
-  .walk { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; }
-  .lane-t { font-size: 12.5px; color: var(--dim); margin-bottom: 6px; font-weight: 700; }
+  /* 참조 칩: 객체마다 고정 색 */
+  .ref { display: inline-block; padding: 1px 10px; border-radius: 99px; font-weight: 800; font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; }
+  .r1 { background: #13304d; color: var(--blue); }
+  .r2 { background: #2f2350; color: var(--violet); }
+  .r3 { background: #183a2b; color: var(--ok); }
+  .r0 { background: #252d38; color: var(--dim); font-weight: 500; }
+
+  /* 상단 내레이션 */
+  .narr { border: 2px solid var(--blue); border-radius: 14px; background: #131d2a; padding: 14px 18px; margin-bottom: 16px; min-height: 128px; }
+  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .narr .title { font-size: 20px; font-weight: 800; margin: 2px 0 8px; }
+  .narr .body { font-size: 15px; }
+  .narr.star { border-color: var(--violet); background: #1d1730; }
+  .narr.star .step { color: var(--violet); }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; }
+  .lane-t { font-size: 13px; color: var(--dim); margin-bottom: 6px; font-weight: 700; }
   .lane-t b { color: var(--text); }
 
-  /* 조립 라인 */
-  .line { display: flex; flex-direction: column; gap: 6px; }
-  .stg { display: grid; grid-template-columns: 30px 1fr; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 10px; background: #141a21; border: 2px solid var(--line); font-size: 13.5px; }
-  .stg .n { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; font-weight: 700; }
-  .stg .d { font-size: 12px; color: var(--dim); }
-  .stg.done { opacity: .55; }
-  .stg.cur { border-color: var(--blue); background: #1b2a40; opacity: 1; }
-  .stg.cur .n { background: var(--blue); color: #0f1419; }
-  .stg.cur.star { border-color: var(--violet); background: #2a2140; }
-  .stg.cur.star .n { background: var(--violet); }
-  .stg.grp { background: none; border: none; padding: 2px 4px; font-size: 12px; color: var(--dim); font-weight: 700; display: block; }
+  /* 코드 */
+  .building { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-bottom: none; border-radius: 10px 10px 0 0; background: #1a1810; font-size: 14px; }
+  .building b { font-family: ui-monospace, Menlo, monospace; }
+  .codebox { background: #0d1116; border: 1px solid var(--line); border-radius: 0 0 10px 10px; padding: 8px 0; font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.9; overflow-x: auto; }
+  .ln { display: grid; grid-template-columns: 34px 30px 1fr; white-space: pre; }
+  .ln .g { text-align: center; }
+  .ln .g .pt { display: inline-block; padding: 0 7px; border-radius: 99px; background: var(--blue); color: #0f1419; font-weight: 800; font-size: 12px; line-height: 1.6; }
+  .ln .n { color: #4a5563; text-align: right; padding-right: 10px; user-select: none; }
+  .ln.cur { background: #1b2a40; }
+  .ln.cur.star { background: #2f2350; } .ln.cur.star .g .pt { background: var(--violet); }
+  .ln.hd { color: var(--mid); }
+  .tk-k { color: #ff7b72; } .tk-c { color: #6e7a87; } .tk-s { color: #a5d6ff; } .tk-t { color: #79c0ff; }
 
-  /* 오른쪽 */
-  .right { display: grid; gap: 12px; align-content: start; }
-  .who { padding: 8px 12px; border-radius: 10px; font-size: 13.5px; background: #1a1810; color: var(--mid); border: 1px solid var(--line); }
-  .who b { color: var(--text); }
-  .bench { border: 2px solid var(--line); border-radius: 12px; padding: 12px; background: #11161c; min-height: 132px; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
-  .obj { border-radius: 12px; padding: 10px 14px; font-size: 13.5px; text-align: center; }
-  .obj .tag { font-family: ui-monospace, Menlo, monospace; font-weight: 800; font-size: 15px; }
-  .obj .s { font-size: 12px; color: var(--dim); }
-  .orig { border: 2px solid var(--blue); background: #13202f; }
-  .orig .tag { color: var(--blue); }
-  .prx { border: 2px dashed var(--violet); background: #1a1626; padding: 10px 12px 12px; }
-  .prx > .tag { color: var(--violet); }
-  .prx .inner { margin-top: 8px; }
-  .gate { font-size: 12px; padding: 3px 8px; border-radius: 7px; background: #2a2140; color: var(--violet); margin: 6px 0; }
-  .ghost { color: var(--dim); font-size: 13px; border: 2px dashed var(--line); border-radius: 12px; padding: 18px; }
-  .row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .box { border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; font-size: 13px; }
-  .box .t { font-weight: 700; font-size: 12.5px; margin-bottom: 6px; }
-  .map .r { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
-  .map .r:last-child { border-bottom: none; }
-  .chip { display: inline-block; padding: 0 8px; border-radius: 99px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
-  .chip.o { background: #13304d; color: var(--blue); }
-  .chip.p { background: #2a2140; color: var(--violet); }
-  .chip.c { background: #183a2b; color: var(--ok); }
-  .chip.x { background: #252d38; color: var(--dim); }
-  .chg { box-shadow: 0 0 0 2px var(--mid); }
-  .ctrl { display: flex; gap: 10px; align-items: center; margin: 16px 0 12px; flex-wrap: wrap; }
+  /* 스택 · 변수 */
+  .vars { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .box { border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; font-size: 13.5px; }
+  .box .t { font-weight: 700; font-size: 13px; margin-bottom: 6px; color: var(--dim); }
+  .kv { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .kv:last-child { border-bottom: none; }
+  .frame { padding: 5px 10px; border-radius: 7px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; margin-bottom: 4px; }
+  .frame.top { outline: 2px solid var(--blue); background: #1b2a40; }
+  .frame.wait { color: var(--dim); }
+
+  /* 힙 */
+  .heap { border: 2px solid var(--line); border-radius: 14px; padding: 14px; background: #11161c; display: grid; gap: 12px; }
+  .obj { border-radius: 12px; padding: 10px 14px; transition: opacity .2s; }
+  .obj .h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .obj .nm { font-weight: 800; font-size: 15.5px; }
+  .obj .f { font-family: ui-monospace, Menlo, monospace; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; padding: 3px 8px; border-radius: 6px; background: #0d1116; margin-top: 4px; }
+  .obj .note { font-size: 12.5px; color: var(--dim); margin-top: 6px; }
+  .o1 { border: 2px solid var(--blue); background: #13202f; }
+  .o2 { border: 2px dashed var(--violet); background: #1a1626; }
+  .o3 { border: 2px solid var(--ok); background: #11201a; }
+  .obj.none { border: 2px dashed var(--line); background: none; opacity: .45; }
+  .obj.none .nm { color: var(--dim); font-weight: 600; }
+  .obj.focus { box-shadow: 0 0 0 3px var(--mid); }
+  .path { text-align: center; font-weight: 800; color: var(--mid); font-size: 14px; }
+  .reg { border: 2px solid var(--mid); border-radius: 12px; padding: 10px 12px; background: #221e12; }
+  .reg .t { color: var(--mid); font-weight: 800; font-size: 13.5px; margin-bottom: 4px; }
+
+  .chg { box-shadow: 0 0 0 3px var(--mid) !important; }
+  .ctrl { display: flex; gap: 10px; align-items: center; margin: 16px 0 0; flex-wrap: wrap; }
   .dots { display: flex; gap: 6px; flex-wrap: wrap; }
-  .dot { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; cursor: pointer; }
+  .dot { width: 28px; height: 28px; border-radius: 50%; background: #252d38; text-align: center; line-height: 28px; font-size: 12px; cursor: pointer; }
   .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
-  .narr { border: 1px solid var(--line); border-radius: 12px; background: #141a21; padding: 14px 16px; min-height: 110px; }
-  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
-  .narr .title { font-size: 17px; font-weight: 700; margin: 2px 0 6px; }
-  .pack { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-  .pack .card { text-align: center; }
-  .pack .big { font-size: 28px; }
-  @media (max-width: 960px) { .two, .walk, .row3, .pack { grid-template-columns: 1fr; } }
+  .dot.st { outline: 2px solid var(--violet); }
+  @media (max-width: 1000px) { .two, .stage, .vars { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <main>
   <h1>빈 생성과 프록시 바꿔치기: 원본은 언제, 누가 프록시로 바꾸나</h1>
-  <div class="sub">2026-10-26 모의면접 꼬리질문 Q1-3 · "컨트롤러가 받은 건 프록시인데, 컨테이너는 원본을 만들었다. 그 사이에 무슨 일이?"</div>
+  <div class="sub">2026-10-26 모의면접 꼬리질문 Q1-3 · 스프링 내부 코드를 한 줄씩 실행하며 변수에 무엇이 들어가는지 따라간다</div>
 
   <!-- 1 -->
   <section>
     <h2><span class="num">1</span>질문 · 내 답 · 판정</h2>
 <pre><code>@Service
 public class OrderService {
-    <span class="vi">@Transactional</span>
+    @Transactional
     public void order(Long itemId) { ... }
 }
 
 @RestController
 @RequiredArgsConstructor
 public class OrderController {
-    private final OrderService orderService;   <span class="dim">// ← 여기에 든 건 무엇?</span>
+    private final OrderService orderService;   <span class="dim">// ← 여기에 든 건 무엇? 누가 · 언제 넣었나?</span>
 }</code></pre>
-    <p style="margin:12px 0 6px"><b>Q1-3.</b> 컨테이너는 리플렉션으로 <b>원본</b> OrderService를 만든다. 그런데 컨트롤러가 받은 건 <b>프록시</b>다. 원본이 프록시로 바뀌는 일은 빈 생성 과정의 <b>어느 시점에, 누가</b> 하나? 컨테이너에 등록되는 건 어느 쪽인가?</p>
-    <div class="two">
+    <div class="two" style="margin-top:12px">
       <div class="card no"><div class="t">내 답변 (원문)</div>"이건 잘 모르겠어"
-        <div style="margin-top:8px" class="no">❌ 모름 (깊이 0). 직전 Q1-2에서 "필드에 든 건 프록시"는 정답 — <b>무엇</b>은 알고 <b>언제·누가</b>를 모름</div></div>
+        <div style="margin-top:8px" class="no">❌ 모름 (깊이 0). 직전 Q1-2의 "필드에 든 건 프록시"는 정답이었다. <b>무엇</b>은 알고 <b>언제 · 누가</b>를 모른다.</div></div>
       <div class="card ok"><div class="t">정답</div>
-        <b>초기화가 끝난 직후(⑤), <code>BeanPostProcessor</code>인 Auto Proxy Creator가</b> 원본을 감싼 프록시를 <b>반환</b>한다.
-        컨테이너는 <b>반환받은 객체</b>를 등록하므로 저장소에는 <b>프록시</b>가 들어가고, 원본은 프록시 안의 <code>target</code>으로만 남는다.</div>
+        <b><code>initializeBean()</code> 마지막 단계의 <code>postProcessAfterInitialization</code></b>에서 <b>AutoProxyCreator</b>(BeanPostProcessor)가 원본 대신 프록시를 <b>반환</b>한다.
+        컨테이너는 <b>그 반환값</b>을 저장소에 등록하므로, 주입되는 것도 프록시다.</div>
     </div>
   </section>
 
   <!-- 2 -->
   <section>
-    <h2><span class="num">2</span>단계별로 따라가기 — 원본 <span class="bl">@1</span>과 프록시 <span class="vi">@2</span></h2>
-    <div class="dim" style="font-size:14px;margin-bottom:12px">왼쪽 = 빈 하나가 만들어지는 조립 라인. 오른쪽 = 지금 작업대 위의 객체 · 싱글톤 저장소 · 컨트롤러 필드. <span class="vi">보라 칸</span> = 바꿔치기가 일어나는 지점. 노란 테두리 = 이번 단계에 바뀐 것. ← → 키.</div>
-    <div class="modes">
-      <button data-m="TX" class="on">@Transactional 있음 (질문 상황)</button>
-      <button data-m="PLAIN">@Transactional 없음 (비교)</button>
+    <h2><span class="num">2</span>스프링 내부를 한 줄씩 실행해 보기</h2>
+    <div class="dim" style="font-size:14px;margin-bottom:12px">
+      객체 색 고정: <span class="ref r1">@1</span> 원본 OrderService · <span class="ref r2">@2</span> OrderService 프록시 · <span class="ref r3">@3</span> OrderController.
+      변수 칸의 칩은 "그 변수가 가리키는 객체"입니다. <b class="mid">노란 테두리</b> = 이번 줄에서 바뀐 것. ← → 키로 이동.
     </div>
-    <div class="walk">
+
+    <div class="narr" id="narr"></div>
+
+    <div class="stage">
       <div>
-        <div class="lane-t">🏭 <b>조립 라인</b> — OrderService 빈 하나의 일생</div>
-        <div class="line" id="line"></div>
+        <div class="lane-t">💻 <b>스프링 내부 코드</b> (실제 이름 기준 · 흐름만 남기고 단순화)</div>
+        <div class="building" id="building"></div>
+        <div class="codebox" id="code"></div>
       </div>
-      <div class="right">
-        <div class="who" id="who"></div>
-        <div><div class="lane-t">🛠 <b>작업대</b> — 지금 손에 든 객체</div><div class="bench" id="bench"></div></div>
-        <div class="row3">
-          <div class="box map" id="mapBox"><div class="t">📦 싱글톤 저장소 (이름 → 객체)</div><div id="map"></div></div>
-          <div class="box" id="ctrlBox"><div class="t">🎮 OrderController.orderService 필드</div><div id="field"></div></div>
+      <div>
+        <div class="lane-t">🧮 <b>변수 · 호출 스택</b> — 지금 실행 중인 코드 기준</div>
+        <div class="vars" style="margin:0 0 14px">
+          <div class="box" id="varBox"><div class="t">🧮 지금 실행 중인 메서드의 지역 변수</div><div id="vars"></div></div>
+          <div class="box"><div class="t">📚 호출 스택 (위가 지금)</div><div id="stack"></div></div>
         </div>
+        <div class="lane-t">🧠 <b>힙 메모리</b> — 실제로 존재하는 객체</div>
+        <div class="heap" id="heap"></div>
       </div>
     </div>
+
     <div class="ctrl">
       <button id="prev">◀ 이전</button>
       <button id="next" class="primary">다음 ▶</button>
       <div class="dots" id="dots"></div>
     </div>
-    <div class="narr" id="narr"></div>
   </section>
 
   <!-- 3 -->
   <section>
-    <h2><span class="num">3</span>택배 포장대로 기억하기</h2>
-    <div class="pack">
-      <div class="card"><div class="big">🔨</div><b>①~④ 물건 완성</b><div class="dim" style="font-size:13px">원본 @1 생성 · 주입 · 초기화</div></div>
-      <div class="card" style="border-color:var(--violet)"><div class="big">📦</div><b class="vi">⑤ 포장대</b><div class="dim" style="font-size:13px">BeanPostProcessor가 상자(@2)에 넣음</div></div>
-      <div class="card"><div class="big">🏬</div><b>⑥ 창고 보관</b><div class="dim" style="font-size:13px">상자째로 저장소에</div></div>
-      <div class="card"><div class="big">🙋</div><b>꺼내 가는 사람</b><div class="dim" style="font-size:13px">컨트롤러는 상자를 받음</div></div>
+    <h2><span class="num">3</span>정리</h2>
+    <div class="key" style="margin-top:0;font-size:15.5px">
+      <code>addSingleton(beanName, <b>exposedObject</b>)</code> — 저장소에 넣는 건 <code>bean</code>(원본)이 아니라 <code>initializeBean()</code>이 <b>돌려준 값</b>이다.<br>
+      그리고 <code>initializeBean()</code> 안에서 <code>result = bpp.postProcessAfterInitialization(result)</code> 한 줄이 <b>result를 @1 → @2로 바꾼다.</b>
     </div>
     <table style="margin-top:16px">
-      <tr><th>헷갈리는 말</th><th>정확한 말</th></tr>
-      <tr><td>"프록시는 <b>가짜</b> 객체"</td><td>프록시는 원본을 <b>품고 앞뒤를 감싸는</b> 객체. 원본도 실제로 만들어지고 비즈니스 로직은 원본이 실행한다</td></tr>
-      <tr><td>"컨테이너가 처음부터 프록시를 만든다"</td><td>먼저 <b>원본</b>을 만들고 초기화까지 끝낸 뒤 <b>⑤에서</b> 감싼다</td></tr>
-      <tr><td>"컨테이너가 바꿔치기한다"</td><td>바꾸는 건 <b>BeanPostProcessor</b>(Auto Proxy Creator). 컨테이너는 <b>반환받은 것을 등록</b>할 뿐</td></tr>
-      <tr><td>"<code>@Transactional</code>이 트랜잭션을 연다"</td><td>어노테이션은 메모. ⑤에서 그 메모를 보고 프록시를 만들지 결정하고, 호출 시 프록시 → <code>TransactionInterceptor</code> → <code>PlatformTransactionManager</code>가 연다</td></tr>
+      <tr><th>단계</th><th>실행하는 주체</th><th>대상 객체</th><th>저장소</th></tr>
+      <tr><td>① <code>createBeanInstance</code></td><td>컨테이너 (리플렉션으로 생성자 호출)</td><td><span class="ref r1">@1</span> 생성</td><td><span class="ref r0">없음</span></td></tr>
+      <tr><td>② <code>populateBean</code></td><td>컨테이너</td><td><span class="ref r1">@1</span></td><td><span class="ref r0">없음</span></td></tr>
+      <tr><td>③ <code>postProcessBeforeInitialization</code></td><td>BeanPostProcessor들 — <code>@PostConstruct</code>는 여기서 실행</td><td><span class="ref r1">@1</span></td><td><span class="ref r0">없음</span></td></tr>
+      <tr><td>④ <code>invokeInitMethods</code></td><td>컨테이너 — <code>afterPropertiesSet</code> · init-method</td><td><span class="ref r1">@1</span></td><td><span class="ref r0">없음</span></td></tr>
+      <tr style="background:#1d1730"><td>⑤ <code>postProcessAfterInitialization</code> ★</td><td><b class="vi">AutoProxyCreator</b> — Advisor 매칭 시 프록시 생성 · 반환</td><td><span class="ref r1">@1</span> → <span class="ref r2">@2</span></td><td><span class="ref r0">없음</span></td></tr>
+      <tr><td>⑥ <code>addSingleton</code></td><td>컨테이너</td><td><span class="ref r2">@2</span></td><td><code>orderService</code> → <span class="ref r2">@2</span></td></tr>
     </table>
-    <div class="say">면접용: <b>"스프링은 기동 시점에 빈을 만들 때, 원본 객체를 생성하고 의존성 주입과 초기화를 마친 뒤 BeanPostProcessor의 postProcessAfterInitialization 단계에서 Auto Proxy Creator가 @Transactional 같은 Advisor가 적용되는지 확인합니다. 적용 대상이면 원본을 감싼 프록시를 반환하고, 컨테이너는 그 프록시를 빈으로 등록하므로 주입받는 쪽은 모두 프록시를 받습니다."</b></div>
+    <div class="say">면접용: <b>"스프링은 빈을 만들 때 원본 객체를 생성하고 의존성 주입과 초기화를 마친 뒤, BeanPostProcessor의 postProcessAfterInitialization 단계에서 AutoProxyCreator가 @Transactional 같은 Advisor가 적용되는지 확인합니다. 적용 대상이면 원본을 target으로 품은 프록시를 반환하고, 컨테이너는 그 반환값을 빈으로 등록하므로 주입받는 쪽은 모두 프록시를 받습니다."</b></div>
     <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
       <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/beans/factory-extension.html">Spring Reference — Container Extension Points (BeanPostProcessor)</a>
       (<i>"Some Spring AOP infrastructure classes are implemented as bean post-processors in order to provide proxy-wrapping logic."</i>) ·
-      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/aop-api/autoproxy.html">Spring Reference — Using the "auto-proxy" facility</a> ·
-      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html">Understanding the Spring Framework's Declarative Transaction Implementation</a></p>
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html#beans-factory-lifecycle-combined-effects">Combining Lifecycle Mechanisms (@PostConstruct → afterPropertiesSet → init-method 순서)</a> ·
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/aop-api/autoproxy.html">Using the "auto-proxy" facility</a> ·
+      <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-framework/blob/main/spring-beans/src/main/java/org/springframework/beans/factory/support/AbstractAutowireCapableBeanFactory.java">AbstractAutowireCapableBeanFactory 소스 (doCreateBean · initializeBean)</a></p>
   </section>
 </main>
 
 <script>
 const $ = id => document.getElementById(id);
-const STAGES = [
-  { g: '설계도 단계' },
-  { k: 'scan', n: 'S', t: '컴포넌트 스캔 → BeanDefinition 등록', d: '아직 객체 없음. 설계도만' },
-  { k: 'need', n: 'C', t: 'OrderController 만들려다 멈춤', d: '생성자에 OrderService 필요 → 먼저 꺼내러 감' },
-  { g: 'OrderService 빈 하나의 일생' },
-  { k: '1', n: '①', t: '인스턴스화', d: '리플렉션으로 생성자 호출' },
-  { k: '2', n: '②', t: '의존성 주입', d: 'OrderService가 필요로 하는 빈들' },
-  { k: '3', n: '③', t: 'BPP before', d: 'postProcessBeforeInitialization' },
-  { k: '4', n: '④', t: '초기화', d: '@PostConstruct → afterPropertiesSet' },
-  { k: '5', n: '⑤', t: 'BPP after ★', d: 'postProcessAfterInitialization — Auto Proxy Creator', star: true },
-  { k: '6', n: '⑥', t: '등록', d: '⑤가 반환한 객체를 저장소에' },
-  { g: '그다음' },
-  { k: 'inj', n: 'C', t: 'OrderController 생성 재개', d: '저장소에서 꺼낸 것을 생성자에' },
-  { k: 'run', n: '▶', t: '요청: orderService.order(1L)', d: '런타임 — 기동이 끝난 뒤' },
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function hl(line) {
+  let code = line, cmt = '';
+  const ci = line.indexOf('//');
+  if (ci >= 0) { code = line.slice(0, ci); cmt = line.slice(ci); }
+  const h = esc(code).replace(/("[^"]*")|\b(Object|String|BeanPostProcessor)\b|\b(for|if|return|new)\b/g,
+    (m, str, ty) => `<span class="${str ? 'tk-s' : ty ? 'tk-t' : 'tk-k'}">${m}</span>`);
+  return h + (cmt ? `<span class="tk-c">${esc(cmt)}</span>` : '');
+}
+const CODE = [
+  '// ── 컨테이너: AbstractAutowireCapableBeanFactory ──',
+  'Object doCreateBean(String beanName) {',
+  '    Object bean = createBeanInstance(beanName);     // ① 생성자 호출',
+  '    populateBean(bean);                             // ② 의존성 주입',
+  '    Object exposedObject = initializeBean(bean);    // ③④⑤',
+  '    addSingleton(beanName, exposedObject);          // ⑥ 저장소 등록',
+  '    return exposedObject;',
+  '}',
+  '',
+  'Object initializeBean(Object bean) {',
+  '    Object result = bean;',
+  '    for (BeanPostProcessor bpp : postProcessors)',
+  '        result = bpp.postProcessBeforeInitialization(result); // ③',
+  '    invokeInitMethods(result);                      // ④',
+  '    for (BeanPostProcessor bpp : postProcessors)',
+  '        result = bpp.postProcessAfterInitialization(result);  // ⑤',
+  '    return result;',
+  '}',
+  '',
+  '// ── BeanPostProcessor 중 하나: AutoProxyCreator ──',
+  'Object postProcessAfterInitialization(Object bean) {',
+  '    if (hasMatchingAdvisor(bean))   // @Transactional 메서드가 있나?',
+  '        return createProxy(bean);   // bean을 target으로 품은 프록시',
+  '    return bean;                    // 없으면 받은 그대로',
+  '}',
 ];
-const ORIG = (s = '원본 OrderService') => `<div class="obj orig"><div class="tag">@1</div><div class="s">${s}</div></div>`;
-const PROXY = (gate = false) => `<div class="obj prx"><div class="tag">@2</div><div class="s vi">OrderService 프록시</div>
-  ${gate ? '<div class="gate">TransactionInterceptor → 시작</div>' : ''}
-  <div class="inner">${ORIG('target = 원본')}</div>
-  ${gate ? '<div class="gate">→ commit / rollback</div>' : ''}</div>`;
-const GHOST = t => `<div class="ghost">${t}</div>`;
-const C = { o: '<span class="chip o">@1 원본</span>', p: '<span class="chip p">@2 프록시</span>', c: '<span class="chip c">컨트롤러</span>', x: '<span class="chip x">(없음)</span>' };
+const STAR_LINES = [16, 21, 22, 23];
 
-const TX = [
-  { k: 'scan', who: '컨테이너 — 컴포넌트 스캔', bench: GHOST('📄 설계도만 있음 (BeanDefinition)<br>orderService · orderController'), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '기동 시작: @Service · @RestController를 찾아 설계도로 등록', d: '컨테이너 <code>refresh()</code>가 시작됩니다. 스캔 단계에서는 <b>객체를 만들지 않고</b> "어떤 클래스를 어떤 이름의 빈으로 만들지"라는 설계도(<code>BeanDefinition</code>)만 등록해요.' },
-  { k: 'need', who: '컨테이너 — getBean("orderController")', bench: GHOST('OrderController 생성자:<br><code>OrderController(OrderService orderService)</code><br>→ 재료가 없다!'), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '컨트롤러를 만들려니 OrderService가 필요 → 먼저 만들러 감', d: '싱글톤은 기동 시점에 <b>미리</b> 만듭니다(eager). 생성자 재료인 OrderService가 저장소에 없으니 <b>의존 대상부터</b> 만들어요. (Q1-1의 "의존 대상이 먼저")' },
-  { k: '1', who: '컨테이너(BeanFactory) — 리플렉션', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '① new OrderService() → 원본 @1 탄생', d: '여기서 만들어지는 건 <b>평범한 OrderService</b>예요. 트랜잭션 기능은 전혀 없습니다. 아직 저장소에도 안 들어갔어요.' },
-  { k: '2', who: '컨테이너 — 의존성 주입', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '② OrderService에 필요한 빈들을 넣음', d: '생성자 주입이었다면 ①에서 이미 들어갔고, 필드·세터 주입이라면 여기서 들어갑니다. 대상은 여전히 <b>@1</b>.' },
-  { k: '3', who: 'BeanPostProcessor들 — before', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '③ BPP before — 초기화 직전 훅', d: '여러 BeanPostProcessor가 차례로 @1을 받아 봅니다. 트랜잭션 프록시는 여기서 만들지 않아요.' },
-  { k: '4', who: '원본 @1 — 자기 초기화', bench: ORIG('원본 · @PostConstruct 실행 중'), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '④ @PostConstruct — 원본 @1 위에서 실행', d: '초기화 메서드는 <b>원본 @1</b>에서 돕니다. 이 시점엔 <b>프록시가 아직 존재하지 않아요.</b> (이 사실은 뒤의 꼬리질문에서 다시 씁니다.)' },
-  { k: '5', who: 'BeanPostProcessor — Auto Proxy Creator', bench: `${ORIG()}<div style="font-size:22px" class="vi">➜</div>${PROXY()}`, map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '⑤ ★ 검사: "@Transactional 있나?" → 있음 → @1을 감싼 @2를 반환', d: 'Auto Proxy Creator(<code>AnnotationAwareAspectJAutoProxyCreator</code> 계열)가 이 빈에 맞는 Advisor를 찾습니다. 트랜잭션 Advisor가 매칭되니 <b>@1을 target으로 품은 프록시 @2</b>를 만들어 <b>@1 대신 @2를 반환</b>해요. BeanPostProcessor는 받은 것과 <b>다른 객체를 돌려줄 수 있다</b>는 게 핵심입니다.' },
-  { k: '6', who: '컨테이너 — 등록', bench: PROXY(), map: { os: 'p', oc: 'x' }, field: '아직 컨트롤러 없음',
-    t: '⑥ 반환받은 @2를 저장소에 등록', d: '컨테이너는 ⑤가 <b>돌려준 것</b>을 그대로 저장합니다. 저장소에 <code>"orderService" → @2</code>. 원본 @1은 저장소에 없고 <b>@2 안에만</b> 있어요.' },
-  { k: 'inj', who: '컨테이너 — OrderController 생성 재개', bench: `<div class="obj" style="border:2px solid var(--ok);background:#11201a"><div class="tag ok">OrderController</div><div class="s">new OrderController(<b class="vi">@2</b>)</div></div>`, map: { os: 'p', oc: 'c' }, field: C.p + ' <span class="dim">— 원본 @1은 볼 방법이 없음</span>',
-    t: '저장소에서 "orderService"를 꺼냄 → @2 → 컨트롤러 생성자에', d: '컨트롤러 입장에서는 꺼낼 수 있는 게 <b>@2뿐</b>이에요. 그래서 필드에 프록시가 들어갑니다. 컨트롤러는 자기가 받은 게 프록시인지 모릅니다.' },
-  { k: 'run', who: '요청 스레드 — 런타임', bench: PROXY(true), map: { os: 'p', oc: 'c' }, field: C.p,
-    t: '런타임: order(1L) → @2가 가로채 트랜잭션 시작 → @1.order() → commit/rollback', d: '기동이 끝난 뒤 요청이 오면 Q1-2에서 답한 흐름이 일어납니다. 프록시가 가로채 <code>TransactionInterceptor</code> → <code>PlatformTransactionManager</code>로 트랜잭션을 열고, 본문은 <b>원본 @1</b>이 실행해요.' },
+const R = n => n ? `<span class="ref r${n}">@${n}</span>` : '<span class="ref r0">—</span>';
+// 각 단계: lines(포인터), b(지금 만드는 빈), vars, stack, heap{o1,o2,o3, focus}, reg{os, oc}, star, run
+const S = [
+  { lines: [3], b: 'orderController', star: false,
+    t: '컨트롤러를 만들려는데 생성자 재료가 없다',
+    d: '기동 중 컨테이너가 <code>orderController</code>를 만들기 시작합니다. ① 생성자를 부르려고 보니 파라미터 <code>OrderService</code>가 필요해요. 저장소를 봤더니 <code>orderService</code>가 <b>아직 없습니다.</b> → 컨트롤러 생성을 <b>여기서 멈추고</b> <code>getBean("orderService")</code>를 먼저 호출합니다.',
+    vars: [['beanName', '"orderController"'], ['bean', 0]],
+    stack: [['createBeanInstance("orderController") — 생성자 인자 해결 중', 1], ['doCreateBean("orderController")', 0]],
+    heap: { o1: 0, o2: 0, o3: 0 }, reg: { os: 0, oc: 0 } },
+  { lines: [3], b: 'orderService',
+    t: '① OrderService 생성자 호출 → 원본 @1 탄생',
+    d: '<code>doCreateBean("orderService")</code>가 새로 시작됩니다(호출 스택 한 칸 위). 리플렉션으로 <code>new OrderService()</code> → 힙에 <span class="ref r1">@1</span>이 생기고 지역 변수 <code>bean</code>이 @1을 가리킵니다. <b>트랜잭션 기능이 전혀 없는 평범한 객체</b>예요.',
+    vars: [['beanName', '"orderService"'], ['bean', 1]],
+    stack: [['doCreateBean("orderService")', 1], ['doCreateBean("orderController") — 멈춰서 기다리는 중', 0]],
+    heap: { o1: 1, o2: 0, o3: 0, focus: 1 }, reg: { os: 0, oc: 0 } },
+  { lines: [4], b: 'orderService',
+    t: '② 의존성 주입 — 대상은 여전히 @1',
+    d: 'OrderService가 필요로 하는 빈(예: <code>OrderRepository</code>)을 넣습니다. 생성자 주입이라면 ①에서 이미 들어갔고, 필드·세터 주입이면 여기서 들어가요. 저장소는 <b>아직 비어 있습니다.</b>',
+    vars: [['beanName', '"orderService"'], ['bean', 1]],
+    stack: [['doCreateBean("orderService")', 1], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 0, o3: 0, focus: 1 }, reg: { os: 0, oc: 0 } },
+  { lines: [5, 10, 11], b: 'orderService',
+    t: 'initializeBean(bean) 진입 — result = @1',
+    d: '<code>initializeBean</code>이 호출됩니다. 첫 줄에서 지역 변수 <code>result</code>에 받은 객체를 담아요. 지금은 <code>result</code> = <span class="ref r1">@1</span>. 이 <code>result</code>가 <b>마지막에 돌려줄 값</b>입니다. 이 변수를 계속 지켜보세요.',
+    vars: [['bean', 1], ['result', 1]], chg: ['result'],
+    stack: [['initializeBean(@1)', 1], ['doCreateBean("orderService")', 0], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 0, o3: 0, focus: 1 }, reg: { os: 0, oc: 0 } },
+  { lines: [12, 13], b: 'orderService',
+    t: '③ BPP before — @PostConstruct가 @1 위에서 실행',
+    d: '등록된 BeanPostProcessor들을 차례로 돌며 <code>result</code>를 넘깁니다. 이 중 <code>CommonAnnotationBeanPostProcessor</code>가 <code>@PostConstruct</code> 메서드를 호출해요. 실행 대상은 <b>원본 @1</b>이고, 이 시점에 <b>프록시는 세상에 없습니다.</b> 모두 받은 걸 그대로 돌려주니 <code>result</code>는 여전히 @1.',
+    vars: [['bean', 1], ['result', 1]],
+    stack: [['postProcessBeforeInitialization(@1)', 1], ['initializeBean(@1)', 0], ['doCreateBean("orderService")', 0], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 0, o3: 0, focus: 1 }, reg: { os: 0, oc: 0 } },
+  { lines: [14], b: 'orderService',
+    t: '④ invokeInitMethods — afterPropertiesSet / init-method',
+    d: '<code>InitializingBean.afterPropertiesSet()</code>, <code>@Bean(initMethod=...)</code> 같은 초기화 메서드를 부릅니다. 대상은 여전히 <span class="ref r1">@1</span>. 여기까지 ①~④는 <b>@Transactional이 있든 없든 완전히 똑같이</b> 흘러갑니다.',
+    vars: [['bean', 1], ['result', 1]],
+    stack: [['initializeBean(@1)', 1], ['doCreateBean("orderService")', 0], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 0, o3: 0, focus: 1 }, reg: { os: 0, oc: 0 } },
+  { lines: [16, 21, 22], b: 'orderService', star: true,
+    t: '⑤ ★ AutoProxyCreator: "이 빈에 적용할 Advisor가 있나?"',
+    d: 'BeanPostProcessor 중 하나인 <b>AutoProxyCreator</b>(<code>AnnotationAwareAspectJAutoProxyCreator</code>)의 차례입니다. @1의 클래스를 살펴보니 <code>order()</code>에 <code>@Transactional</code>이 있어서 <b>트랜잭션 Advisor가 매칭</b>됩니다. → <code>if</code>가 <b>true</b>.',
+    vars: [['bean (이 메서드의 파라미터)', 1]],
+    stack: [['AutoProxyCreator.postProcessAfterInitialization(@1)', 1], ['initializeBean(@1)', 0], ['doCreateBean("orderService")', 0], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 0, o3: 0, focus: 1 }, reg: { os: 0, oc: 0 } },
+  { lines: [23], b: 'orderService', star: true,
+    t: '⑤ ★ createProxy(@1) → 프록시 @2 생성 → @2를 return',
+    d: '프록시 <span class="ref r2">@2</span>가 힙에 새로 생깁니다. @2는 필드 <code>target</code>으로 <b>@1을 가리킵니다</b>(원본은 버려지지 않아요). 그리고 이 메서드는 <b>받은 @1이 아니라 새로 만든 @2를 return</b>합니다. BeanPostProcessor는 받은 것과 다른 객체를 돌려줄 수 있어요. 이게 바꿔치기의 정체입니다.',
+    vars: [['bean (파라미터)', 1], ['return 값', 2]], chg: ['return 값'],
+    stack: [['AutoProxyCreator.postProcessAfterInitialization(@1)', 1], ['initializeBean(@1)', 0], ['doCreateBean("orderService")', 0], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 1, o3: 0, focus: 2 }, reg: { os: 0, oc: 0 } },
+  { lines: [16], b: 'orderService', star: true,
+    t: '⑤ ★ result = (돌려받은 값) → result가 @1에서 @2로 바뀜',
+    d: '<code>initializeBean</code>으로 돌아와 대입문 <code>result = bpp.postProcessAfterInitialization(result)</code>가 완료됩니다. <b><code>result</code>가 <span class="ref r1">@1</span> → <span class="ref r2">@2</span></b>. 반면 <code>bean</code>은 그대로 @1이에요. 두 변수가 갈라지는 순간입니다.',
+    vars: [['bean', 1], ['result', 2]], chg: ['result'],
+    stack: [['initializeBean(@1)', 1], ['doCreateBean("orderService")', 0], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 1, o3: 0, focus: 2 }, reg: { os: 0, oc: 0 } },
+  { lines: [17, 5], b: 'orderService',
+    t: 'return result → exposedObject = @2',
+    d: '<code>initializeBean</code>이 <code>result</code>(=@2)를 돌려주고, <code>doCreateBean</code>에서 <code>exposedObject</code>에 담깁니다. 이제 <code>doCreateBean</code>의 지역 변수는 <code>bean</code> = @1, <code>exposedObject</code> = <b>@2</b>.',
+    vars: [['beanName', '"orderService"'], ['bean', 1], ['exposedObject', 2]], chg: ['exposedObject'],
+    stack: [['doCreateBean("orderService")', 1], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 1, o3: 0, focus: 2 }, reg: { os: 0, oc: 0 } },
+  { lines: [6, 7], b: 'orderService',
+    t: '⑥ addSingleton("orderService", exposedObject) → 저장소에 @2',
+    d: '저장소에 넣는 인자는 <code>bean</code>이 아니라 <b><code>exposedObject</code></b>입니다. 그래서 <code>"orderService"</code> → <span class="ref r2">@2</span>. 원본 @1은 저장소 어디에도 없고 <b>@2의 target으로만</b> 도달할 수 있어요. 이제 이 빈을 달라는 모든 요청에는 @2가 나갑니다.',
+    vars: [['beanName', '"orderService"'], ['bean', 1], ['exposedObject', 2]],
+    stack: [['doCreateBean("orderService")', 1], ['doCreateBean("orderController") — 대기', 0]],
+    heap: { o1: 1, o2: 1, o3: 0, focus: 2 }, reg: { os: 2, oc: 0 } },
+  { lines: [3], b: 'orderController',
+    t: '컨트롤러 생성 재개: new OrderController(@2) → @3',
+    d: '멈춰 있던 <code>doCreateBean("orderController")</code>로 돌아옵니다. <code>getBean("orderService")</code>가 돌려준 건 <span class="ref r2">@2</span>. 그래서 <code>new OrderController(@2)</code> → <span class="ref r3">@3</span>의 <code>orderService</code> 필드는 <b>@2</b>를 가리킵니다. 컨트롤러는 원본 @1에 직접 닿을 방법이 없어요.',
+    vars: [['beanName', '"orderController"'], ['bean', 3]],
+    stack: [['doCreateBean("orderController")', 1]],
+    heap: { o1: 1, o2: 1, o3: 1, focus: 3 }, reg: { os: 2, oc: 0 } },
+  { lines: [5, 6], b: 'orderController',
+    t: '컨트롤러도 ③~⑥을 거침 → Advisor 없음 → @3 그대로 등록',
+    d: '컨트롤러도 같은 <code>initializeBean</code>을 지납니다. AutoProxyCreator가 확인하지만 적용할 Advisor가 없으니 <code>return bean</code>으로 <b>받은 @3을 그대로</b> 돌려줘요. 프록시를 만들지 말지는 <b>⑤에서 빈마다 결정</b>됩니다.',
+    vars: [['beanName', '"orderController"'], ['bean', 3], ['exposedObject', 3]],
+    stack: [['doCreateBean("orderController")', 1]],
+    heap: { o1: 1, o2: 1, o3: 1, focus: 3 }, reg: { os: 2, oc: 3 } },
+  { lines: [], b: '— (기동 완료 · 요청 처리 중)', run: true,
+    t: '기동 끝 · 요청 도착: @3.orderService.order(1L) → @2 → @1',
+    d: '이제 Q1-2의 장면입니다. 컨트롤러 @3이 필드로 <span class="ref r2">@2</span>를 호출 → @2가 가로채 <code>TransactionInterceptor</code> → <code>PlatformTransactionManager</code>로 트랜잭션 시작 → <code>target</code>인 <span class="ref r1">@1</span>의 <code>order()</code> 실행 → 커밋/롤백. 위의 내부 코드는 <b>기동 때 한 번</b>만 돌았고, 요청마다 다시 돌지 않습니다.',
+    vars: [], stack: [['OrderController.order() → @2.order(1L) → @1.order(1L)', 1]],
+    heap: { o1: 1, o2: 1, o3: 1 }, reg: { os: 2, oc: 3 } },
 ];
-const PLAIN = TX.map(s => ({ ...s }));
-PLAIN[6] = { k: '5', who: 'BeanPostProcessor — Auto Proxy Creator', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
-  t: '⑤ 검사: "적용할 Advisor 있나?" → 없음 → @1 그대로 반환', d: '같은 검사대를 지나지만 <code>@Transactional</code>(또는 다른 AOP 대상)이 없으니 <b>받은 @1을 그대로</b> 돌려줍니다. 프록시를 만들지 <b>결정하는 곳</b>이 바로 여기예요.' };
-PLAIN[7] = { k: '6', who: '컨테이너 — 등록', bench: ORIG(), map: { os: 'o', oc: 'x' }, field: '아직 컨트롤러 없음',
-  t: '⑥ 반환받은 @1을 저장소에 등록', d: '규칙은 같습니다. <b>반환받은 것을 등록.</b> 이번엔 그게 원본이에요.' };
-PLAIN[8] = { ...TX[8], bench: `<div class="obj" style="border:2px solid var(--ok);background:#11201a"><div class="tag ok">OrderController</div><div class="s">new OrderController(<b class="bl">@1</b>)</div></div>`, map: { os: 'o', oc: 'c' }, field: C.o,
-  t: '저장소에서 꺼냄 → @1 → 컨트롤러 생성자에', d: '이번엔 원본이 그대로 주입됩니다.' };
-PLAIN[9] = { k: 'run', who: '요청 스레드 — 런타임', bench: ORIG('order() 바로 실행'), map: { os: 'o', oc: 'c' }, field: C.o,
-  t: '런타임: order(1L) → @1이 바로 실행. 가로챌 프록시가 없으니 트랜잭션도 없음', d: '①~④와 ⑥은 두 경우가 <b>완전히 같고</b>, 차이는 <b>⑤의 반환값 하나</b>뿐입니다.' };
 
-const MODES = { TX, PLAIN };
-let mode = 'TX', i = 0;
+let i = Math.min(Math.max((parseInt(location.hash.slice(1)) || 1) - 1, 0), S.length - 1);
+function heapHtml(s) {
+  const h = s.heap, f = h.focus;
+  const o3 = h.o3 ? `<div class="obj o3 ${f === 3 ? 'focus' : ''}"><div class="h"><span class="nm ok">OrderController</span>${R(3)}</div>
+      <div class="f"><span>orderService</span><span>→ ${R(2)}</span></div>
+      <div class="note">생성자로 받은 값 = 저장소에서 꺼낸 @2</div></div>`
+    : `<div class="obj none"><div class="h"><span class="nm">OrderController</span>${R(3)}</div><div class="note">아직 없음</div></div>`;
+  const o2 = h.o2 ? `<div class="obj o2 ${f === 2 ? 'focus' : ''}"><div class="h"><span class="nm vi">OrderService 프록시</span>${R(2)}</div>
+      <div class="f"><span>target</span><span>→ ${R(1)}</span></div>
+      <div class="note">order() 호출을 가로채 트랜잭션 처리 후 target에 위임</div></div>`
+    : `<div class="obj none"><div class="h"><span class="nm">OrderService 프록시</span>${R(2)}</div><div class="note">아직 없음 — ⑤에서 생긴다</div></div>`;
+  const o1 = h.o1 ? `<div class="obj o1 ${f === 1 ? 'focus' : ''}"><div class="h"><span class="nm bl">OrderService (원본)</span>${R(1)}</div>
+      <div class="f"><span>orderRepository</span><span>${s === S[1] ? '<span class="dim">(주입 전)</span>' : '주입됨'}</span></div>
+      <div class="note">비즈니스 로직 order()의 실제 본문을 가진 객체</div></div>`
+    : `<div class="obj none"><div class="h"><span class="nm">OrderService (원본)</span>${R(1)}</div><div class="note">아직 없음 — ①에서 생긴다</div></div>`;
+  const arrow = t => `<div class="path">${s.run ? t : '<span class="dim" style="font-weight:500">│</span>'}</div>`;
+  const reg = `<div class="reg" id="reg"><div class="t">📦 싱글톤 저장소 (singletonObjects)</div>
+      <div class="kv"><span>"orderService"</span>${s.reg.os ? R(s.reg.os) : '<span class="ref r0">없음</span>'}</div>
+      <div class="kv"><span>"orderController"</span>${s.reg.oc ? R(s.reg.oc) : '<span class="ref r0">없음</span>'}</div></div>`;
+  return reg + o3 + arrow('▼ ① 요청 → 필드 orderService로 호출') + o2 + arrow('▼ ② 트랜잭션 시작 후 target에 위임') + o1;
+}
 function render() {
-  const all = MODES[mode], s = all[i], prev = i ? all[i - 1] : null;
-  const order = STAGES.filter(x => x.k).map(x => x.k), ci = order.indexOf(s.k);
-  $('line').innerHTML = STAGES.map(x => x.g ? `<div class="stg grp">${x.g}</div>` :
-    `<div class="stg ${x.k === s.k ? 'cur' : order.indexOf(x.k) < ci ? 'done' : ''} ${x.star ? 'star' : ''}"><span class="n">${x.n}</span><span>${x.t}<div class="d">${x.d}</div></span></div>`).join('');
-  $('who').innerHTML = `▶ 지금 일하는 것: <b>${s.who}</b>`;
-  $('bench').innerHTML = s.bench;
-  $('bench').className = 'bench ' + (prev && prev.bench !== s.bench ? 'chg' : '');
-  $('map').innerHTML = `<div class="r"><span>"orderService"</span>${C[s.map.os]}</div><div class="r"><span>"orderController"</span>${C[s.map.oc]}</div>`;
-  $('mapBox').className = 'box map ' + (prev && JSON.stringify(prev.map) !== JSON.stringify(s.map) ? 'chg' : '');
-  $('field').innerHTML = s.field.startsWith('<') ? s.field : `<span class="dim">${s.field}</span>`;
-  $('ctrlBox').className = 'box ' + (prev && prev.field !== s.field ? 'chg' : '');
-  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${all.length}</div><div class="title">${s.t}</div><div>${s.d}</div>`;
-  $('prev').disabled = i === 0; $('next').disabled = i === all.length - 1;
-  $('dots').innerHTML = all.map((_, k) => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
+  const s = S[i], prev = i ? S[i - 1] : null;
+  $('narr').className = 'narr ' + (s.star ? 'star' : '');
+  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${S.length}${s.star ? ' · ★ 바꿔치기 구간' : ''}</div><div class="title">${s.t}</div><div class="body">${s.d}</div>`;
+  $('building').innerHTML = `🏗 지금 만드는 빈: <b>${s.b}</b>`;
+  $('code').innerHTML = CODE.map((ln, k) => {
+    const n = k + 1, cur = s.lines.includes(n), hd = ln.startsWith('// ──');
+    return `<div class="ln ${cur ? 'cur' : ''} ${cur && STAR_LINES.includes(n) && s.star ? 'star' : ''} ${hd ? 'hd' : ''}"><span class="g">${cur ? `<span class="pt">${i + 1}</span>` : ''}</span><span class="n">${n}</span><span>${hd ? esc(ln) : hl(ln)}</span></div>`;
+  }).join('');
+  $('vars').innerHTML = s.vars.length ? s.vars.map(([k, v]) => {
+    const changed = (s.chg || []).includes(k);
+    return `<div class="kv"><span>${k}</span><span style="${changed ? 'outline:2px solid var(--mid);border-radius:99px' : ''}">${typeof v === 'number' ? R(v) : `<span class="tk-s">${v}</span>`}</span></div>`;
+  }).join('') : '<span class="dim">—</span>';
+  $('stack').innerHTML = s.stack.map(([t, top]) => `<div class="frame ${top ? 'top' : 'wait'}">${t}</div>`).join('');
+  $('heap').innerHTML = heapHtml(s);
+  if (prev && JSON.stringify(prev.reg) !== JSON.stringify(s.reg)) $('reg').classList.add('chg');
+  $('prev').disabled = i === 0; $('next').disabled = i === S.length - 1;
+  $('dots').innerHTML = S.map((x, k) => `<div class="dot ${k === i ? 'on' : ''} ${x.star ? 'st' : ''}" data-k="${k}">${k + 1}</div>`).join('');
   document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
 }
-document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
-  mode = b.dataset.m;
-  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); render();
-});
 $('next').onclick = () => { i++; render(); };
 $('prev').onclick = () => { i--; render(); };
 document.addEventListener('keydown', e => {
-  if (e.key === 'ArrowRight' && i < MODES[mode].length - 1) { i++; render(); }
+  if (e.key === 'ArrowRight' && i < S.length - 1) { i++; render(); }
   if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
 });
 render();
