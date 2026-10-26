@@ -100,6 +100,16 @@
   .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
   .dot.st { outline: 2px solid var(--violet); }
   @media (max-width: 1000px) { .two, .stage, .vars { grid-template-columns: 1fr; } }
+  /* 모션 */
+  [data-fid] { position: relative; }
+  .obj.hit { animation: hit 2.4s ease-in-out infinite; }
+  .obj.hit.d2 { animation-delay: .6s; } .obj.hit.d3 { animation-delay: 1.2s; }
+  @keyframes hit { 0%, 30%, 100% { box-shadow: 0 0 0 0 transparent; } 12% { box-shadow: 0 0 0 4px var(--mid), 0 0 28px rgba(245,184,74,.45); } }
+  .path.go { animation: go 2.4s ease-in-out infinite; } .path.go.d2 { animation-delay: .9s; }
+  @keyframes go { 0%, 45%, 100% { opacity: .35; transform: none; } 20% { opacity: 1; transform: translateY(4px); } }
+  .star .ln.cur.star, .ln.cur.star { animation: glow 1.6s ease-in-out infinite; }
+  @keyframes glow { 50% { background: #3c2d6b; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
 </style>
 </head>
 <body>
@@ -318,52 +328,92 @@ const S = [
     heap: { o1: 1, o2: 1, o3: 1 }, reg: { os: 2, oc: 3 } },
 ];
 
+// 칩이 어디서 "날아오는지" (모션 전용): 새 칩 fid → 직전 화면에 있던 출발지 fid
+S[8].from = { 'v-result-2': 'v-return 값-2' };
+S[9].from = { 'v-exposedObject-2': 'v-result-2' };
+S[10].from = { 'reg-os': 'v-exposedObject-2' };
+S[11].from = { 'o3-field': 'reg-os' };
+S[12].from = { 'reg-oc': 'v-bean-3' };
 let i = Math.min(Math.max((parseInt(location.hash.slice(1)) || 1) - 1, 0), S.length - 1);
 function heapHtml(s) {
-  const h = s.heap, f = h.focus;
-  const o3 = h.o3 ? `<div class="obj o3 ${f === 3 ? 'focus' : ''}"><div class="h"><span class="nm ok">OrderController</span>${R(3)}</div>
-      <div class="f"><span>orderService</span><span>→ ${R(2)}</span></div>
+  const h = s.heap, f = h.focus, run = s.run;
+  const from = (id, n) => s.from && s.from[id] ? ` data-from="${s.from[id]}"` : '';
+  const RF = (n, fid, fromKey) => `<span class="ref r${n}" data-fid="${fid}"${from(fromKey)}>@${n}</span>`;
+  const o3 = h.o3 ? `<div class="obj o3 ${f === 3 ? 'focus' : ''} ${run ? 'hit' : ''}" data-fid="o3"><div class="h"><span class="nm ok">OrderController</span>${R(3)}</div>
+      <div class="f"><span>orderService</span><span>→ ${RF(2, 'o3-field', 'o3-field')}</span></div>
       <div class="note">생성자로 받은 값 = 저장소에서 꺼낸 @2</div></div>`
     : `<div class="obj none"><div class="h"><span class="nm">OrderController</span>${R(3)}</div><div class="note">아직 없음</div></div>`;
-  const o2 = h.o2 ? `<div class="obj o2 ${f === 2 ? 'focus' : ''}"><div class="h"><span class="nm vi">OrderService 프록시</span>${R(2)}</div>
+  const o2 = h.o2 ? `<div class="obj o2 ${f === 2 ? 'focus' : ''} ${run ? 'hit d2' : ''}" data-fid="o2" data-pop="wrap"><div class="h"><span class="nm vi">OrderService 프록시</span>${R(2)}</div>
       <div class="f"><span>target</span><span>→ ${R(1)}</span></div>
       <div class="note">order() 호출을 가로채 트랜잭션 처리 후 target에 위임</div></div>`
     : `<div class="obj none"><div class="h"><span class="nm">OrderService 프록시</span>${R(2)}</div><div class="note">아직 없음 — ⑤에서 생긴다</div></div>`;
-  const o1 = h.o1 ? `<div class="obj o1 ${f === 1 ? 'focus' : ''}"><div class="h"><span class="nm bl">OrderService (원본)</span>${R(1)}</div>
-      <div class="f"><span>orderRepository</span><span>${s === S[1] ? '<span class="dim">(주입 전)</span>' : '주입됨'}</span></div>
+  const o1 = h.o1 ? `<div class="obj o1 ${f === 1 ? 'focus' : ''} ${run ? 'hit d3' : ''}" data-fid="o1"><div class="h"><span class="nm bl">OrderService (원본)</span>${R(1)}</div>
+      <div class="f"><span>orderRepository</span><span data-fid="o1-repo-${s === S[1] ? 0 : 1}">${s === S[1] ? '<span class="dim">(주입 전)</span>' : '주입됨'}</span></div>
       <div class="note">비즈니스 로직 order()의 실제 본문을 가진 객체</div></div>`
     : `<div class="obj none"><div class="h"><span class="nm">OrderService (원본)</span>${R(1)}</div><div class="note">아직 없음 — ①에서 생긴다</div></div>`;
-  const arrow = t => `<div class="path">${s.run ? t : '<span class="dim" style="font-weight:500">│</span>'}</div>`;
+  const arrow = (t, d) => `<div class="path ${run ? 'go ' + d : ''}">${run ? t : '<span class="dim" style="font-weight:500">│</span>'}</div>`;
   const reg = `<div class="reg" id="reg"><div class="t">📦 싱글톤 저장소 (singletonObjects)</div>
-      <div class="kv"><span>"orderService"</span>${s.reg.os ? R(s.reg.os) : '<span class="ref r0">없음</span>'}</div>
-      <div class="kv"><span>"orderController"</span>${s.reg.oc ? R(s.reg.oc) : '<span class="ref r0">없음</span>'}</div></div>`;
-  return reg + o3 + arrow('▼ ① 요청 → 필드 orderService로 호출') + o2 + arrow('▼ ② 트랜잭션 시작 후 target에 위임') + o1;
+      <div class="kv"><span>"orderService"</span>${s.reg.os ? RF(s.reg.os, 'reg-os', 'reg-os') : '<span class="ref r0">없음</span>'}</div>
+      <div class="kv"><span>"orderController"</span>${s.reg.oc ? RF(s.reg.oc, 'reg-oc', 'reg-oc') : '<span class="ref r0">없음</span>'}</div></div>`;
+  return reg + o3 + arrow('▼ ① 요청 → 필드 orderService로 호출', '') + o2 + arrow('▼ ② 트랜잭션 시작 후 target에 위임', 'd2') + o1;
 }
 function render() {
   const s = S[i], prev = i ? S[i - 1] : null;
   $('narr').className = 'narr ' + (s.star ? 'star' : '');
   $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${S.length}${s.star ? ' · ★ 바꿔치기 구간' : ''}</div><div class="title">${s.t}</div><div class="body">${s.d}</div>`;
-  $('building').innerHTML = `🏗 지금 만드는 빈: <b>${s.b}</b>`;
+  $('building').innerHTML = `🏗 지금 만드는 빈: <b data-fid="bld-${s.b}">${s.b}</b>`;
+  let first = true;
   $('code').innerHTML = CODE.map((ln, k) => {
     const n = k + 1, cur = s.lines.includes(n), hd = ln.startsWith('// ──');
-    return `<div class="ln ${cur ? 'cur' : ''} ${cur && STAR_LINES.includes(n) && s.star ? 'star' : ''} ${hd ? 'hd' : ''}"><span class="g">${cur ? `<span class="pt">${i + 1}</span>` : ''}</span><span class="n">${n}</span><span>${hd ? esc(ln) : hl(ln)}</span></div>`;
+    const pt = cur ? `<span class="pt" ${first ? 'data-fid="ptr"' : ''}>${i + 1}</span>` : '';
+    if (cur) first = false;
+    return `<div class="ln ${cur ? 'cur' : ''} ${cur && STAR_LINES.includes(n) && s.star ? 'star' : ''} ${hd ? 'hd' : ''}"><span class="g">${pt}</span><span class="n">${n}</span><span>${hd ? esc(ln) : hl(ln)}</span></div>`;
   }).join('');
   $('vars').innerHTML = s.vars.length ? s.vars.map(([k, v]) => {
     const changed = (s.chg || []).includes(k);
-    return `<div class="kv"><span>${k}</span><span style="${changed ? 'outline:2px solid var(--mid);border-radius:99px' : ''}">${typeof v === 'number' ? R(v) : `<span class="tk-s">${v}</span>`}</span></div>`;
+    const fid = `v-${k}-${v}`, fr = s.from && s.from[fid] ? ` data-from="${s.from[fid]}"` : '';
+    const val = typeof v === 'number' ? `<span class="ref r${v || 0}" data-fid="${fid}"${fr}>${v ? '@' + v : '—'}</span>` : `<span class="tk-s">${v}</span>`;
+    return `<div class="kv"><span>${k}</span><span style="${changed ? 'outline:2px solid var(--mid);border-radius:99px' : ''}">${val}</span></div>`;
   }).join('') : '<span class="dim">—</span>';
-  $('stack').innerHTML = s.stack.map(([t, top]) => `<div class="frame ${top ? 'top' : 'wait'}">${t}</div>`).join('');
+  $('stack').innerHTML = s.stack.map(([t, top]) => `<div class="frame ${top ? 'top' : 'wait'}" data-fid="f-${t.split(' — ')[0].replace(/"/g, "'")}">${t}</div>`).join('');
   $('heap').innerHTML = heapHtml(s);
   if (prev && JSON.stringify(prev.reg) !== JSON.stringify(s.reg)) $('reg').classList.add('chg');
   $('prev').disabled = i === 0; $('next').disabled = i === S.length - 1;
   $('dots').innerHTML = S.map((x, k) => `<div class="dot ${k === i ? 'on' : ''} ${x.star ? 'st' : ''}" data-k="${k}">${k + 1}</div>`).join('');
-  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+  document.querySelectorAll('.dot').forEach(d => d.onclick = () => go(+d.dataset.k));
 }
-$('next').onclick = () => { i++; render(); };
-$('prev').onclick = () => { i--; render(); };
+
+// ── 모션: 렌더 전후 위치를 비교해 같은 data-fid는 미끄러지고, 새로 생긴 건 튀어나온다 (FLIP)
+const MOTION = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+const EASE = 'cubic-bezier(.2,.8,.2,1)';
+// 위치는 .stage 기준 — 위쪽 설명 박스 높이가 바뀌어도 전체가 출렁이지 않게
+function pos(el) { const r = el.getBoundingClientRect(), c = el.closest('.stage'); if (!c) return r; const k = c.getBoundingClientRect(); return { left: r.left - k.left, top: r.top - k.top }; }
+function snap() { document.getAnimations().forEach(a => { if (!(a instanceof CSSAnimation)) a.finish(); }); const m = new Map(); document.querySelectorAll('[data-fid]').forEach(el => m.set(el.dataset.fid, pos(el))); return m; }
+function flash(el, delay = 0) { el.animate([{ boxShadow: '0 0 0 4px #f5b84a, 0 0 22px rgba(245,184,74,.6)' }, { boxShadow: '0 0 0 0 transparent' }], { duration: 1300, delay, easing: 'ease-out' }); }
+function play(before) {
+  if (!MOTION || !before) return;
+  document.querySelectorAll('[data-fid]').forEach(el => {
+    const a = pos(el), same = before.get(el.dataset.fid);
+    const src = same || (el.dataset.from && before.get(el.dataset.from));
+    if (src) {
+      const dx = src.left - a.left, dy = src.top - a.top;
+      if (Math.abs(dx) + Math.abs(dy) > 1) el.animate([{ transform: `translate(${dx}px, ${dy}px)`, zIndex: 9 }, { transform: 'none', zIndex: 9 }], { duration: same ? 480 : 820, easing: EASE });
+      if (!same) flash(el, 700);
+    } else if (el.dataset.pop === 'wrap') {
+      el.animate([{ opacity: 0, transform: 'scale(1.35)', filter: 'blur(3px)' }, { opacity: 1, transform: 'none', filter: 'none' }], { duration: 650, easing: EASE });
+      flash(el, 500);
+    } else {
+      el.animate([{ opacity: 0, transform: 'scale(.7)' }, { opacity: 1, transform: 'scale(1.06)', offset: .7 }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'ease-out' });
+    }
+  });
+}
+function narrIn() { if (MOTION) [...$('narr').children].forEach((el, k) => el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 350, delay: k * 40, easing: EASE, fill: 'backwards' })); }
+function go(n) { const b = snap(); i = n; render(); play(b); narrIn(); }
+$('next').onclick = () => go(i + 1);
+$('prev').onclick = () => go(i - 1);
 document.addEventListener('keydown', e => {
-  if (e.key === 'ArrowRight' && i < S.length - 1) { i++; render(); }
-  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+  if (e.key === 'ArrowRight' && i < S.length - 1) go(i + 1);
+  if (e.key === 'ArrowLeft' && i > 0) go(i - 1);
 });
 render();
 </script>

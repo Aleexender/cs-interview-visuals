@@ -88,6 +88,13 @@
   .dot { width: 28px; height: 28px; border-radius: 50%; background: #252d38; text-align: center; line-height: 28px; font-size: 12px; cursor: pointer; }
   .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
   @media (max-width: 1000px) { .two, .stage, .req { grid-template-columns: 1fr; } }
+  /* 모션 */
+  [data-fid] { position: relative; }
+  .st.cur { animation: ring 1.8s ease-in-out infinite; }
+  @keyframes ring { 50% { filter: brightness(1.25); } }
+  .sql .q.early { animation: warnblink 1.6s ease-in-out infinite; }
+  @keyframes warnblink { 50% { background: #4a3a14; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
 </style>
 </head>
 <body>
@@ -219,19 +226,20 @@ const STEPS = [
   { t: 'author 채우기 (LAZY)', d: 'author_id = 7 → Author 프록시를 만들어 끼우려 함' },
   { t: '내 코드: post.author.name', d: '여기서 처음 Author 내용이 필요해짐' },
 ];
-const Q1 = `<div class="q">select id, title, author_id from post where id = 1<br><span class="dim">→ { id: 1, title: "hi", author_id: 7 }</span></div>`;
-const QA = (early) => `<div class="q ${early ? 'early' : ''}">select * from author where id = 7${early ? '  <b>← LAZY인데 지금 나감</b>' : ''}</div>`;
-const POST = (f) => `<div class="obj post"><div class="h"><span>Post</span><span class="dim" style="font-weight:500;font-size:12px">진짜 엔티티</span></div>
-  <div class="f"><span>id</span><span>${f.id ?? '<span class="dim">null</span>'}</span></div>
-  <div class="f"><span>title</span><span>${f.title ?? '<span class="dim">null</span>'}</span></div>
-  <div class="f"><span>author</span><span>${f.author ?? '<span class="dim">null</span>'}</span></div></div>`;
-const REAL = `<div class="obj real"><div class="h"><span>Author (진짜)</span><span class="dim" style="font-weight:500;font-size:12px">이미 DB에서 다 읽어옴</span></div>
+const Q1 = `<div class="q" data-fid="q1">select id, title, author_id from post where id = 1<br><span class="dim">→ { id: 1, title: "hi", author_id: 7 }</span></div>`;
+const QA = (early) => `<div class="q ${early ? 'early' : ''}" data-fid="qa" data-pop="slide">select * from author where id = 7${early ? '  <b>← LAZY인데 지금 나감</b>' : ''}</div>`;
+const V = (fid, html) => `<span data-fid="${fid}" data-pop="flash" style="display:inline-block">${html}</span>`;
+const POST = (f) => `<div class="obj post" data-fid="post"><div class="h"><span>Post</span><span class="dim" style="font-weight:500;font-size:12px">진짜 엔티티</span></div>
+  <div class="f"><span>id</span>${V('p-id-' + (f.id ?? 'n'), f.id ?? '<span class="dim">null</span>')}</div>
+  <div class="f"><span>title</span>${V('p-title-' + (f.title ? 'set' : 'n'), f.title ?? '<span class="dim">null</span>')}</div>
+  <div class="f"><span>author</span>${V('p-author-' + (f.author ? (f.author.includes('프록시') ? 'prx' : 'real') : 'n'), f.author ?? '<span class="dim">null</span>')}</div></div>`;
+const REAL = `<div class="obj real" data-fid="real"><div class="h"><span>Author (진짜)</span><span class="dim" style="font-weight:500;font-size:12px">이미 DB에서 다 읽어옴</span></div>
   <div class="f"><span>id</span><span>7</span></div><div class="f"><span>name</span><span>"kim"</span></div></div>`;
-const PRX = (loaded) => `<div class="obj prx"><div class="h"><span>Author 프록시 (Author를 상속)</span><span style="font-size:12px">${loaded ? '초기화됨' : '아직 비어 있음'}</span></div>
-  <div class="f"><span>id</span><span>7</span></div><div class="f"><span>name</span><span>${loaded ? '"kim" <span class="dim">(target에서)</span>' : '<span class="dim">? (모름)</span>'}</span></div>
+const PRX = (loaded) => `<div class="obj prx" data-fid="prx"><div class="h"><span>Author 프록시 (Author를 상속)</span>${V('prx-st-' + loaded, `<span style="font-size:12px">${loaded ? '초기화됨' : '아직 비어 있음'}</span>`)}</div>
+  <div class="f"><span>id</span><span>7</span></div><div class="f"><span>name</span>${V('prx-name-' + loaded, loaded ? '"kim" <span class="dim">(target에서)</span>' : '<span class="dim">? (모름)</span>')}</div>
   <div class="note">${loaded ? 'name이 필요해진 순간 SELECT를 보내 진짜 Author를 target으로 연결' : 'post 테이블의 author_id로 id만 알고 있음 — 08-10 "프록시는 식별자를 이미 갖고 있다"'}</div></div>`;
-const BOOM = m => `<div class="boom">💥 ${m}</div>`;
-const EMPTY = '<div class="empty">아직 객체 없음</div>';
+const BOOM = m => `<div class="boom" data-fid="boom-${m}" data-pop="shake">💥 ${m}</div>`;
+const EMPTY = '<div class="empty" data-fid="empty">아직 객체 없음</div>';
 
 const S = {
   A: [
@@ -267,27 +275,54 @@ function render() {
   const cls = { bad: 'bad', warn: 'warn', good: 'good' }[s.k] || '';
   $('narr').className = 'narr ' + cls;
   $('narr').innerHTML = `<div class="step">STEP ${i + 1} / 5 · ${document.querySelector('.modes button.on').textContent}</div><div class="title">${s.t}</div><div>${s.d}</div>`;
-  $('bc').innerHTML = BC[mode].map(([k, v, c]) => `<div class="row"><span class="dim">${k}</span><span>${v} <span class="tag ${c}">${c === 'bad' ? '❌' : '✅'}</span></span></div>`).join('');
+  $('bc').innerHTML = BC[mode].map(([k, v, c]) => `<div class="row"><span class="dim">${k}</span><span data-fid="bc-${k}-${v}" data-pop="flash">${v} <span class="tag ${c}">${c === 'bad' ? '❌' : '✅'}</span></span></div>`).join('');
   $('steps').innerHTML = STEPS.map((x, k) => {
     const sk = S[mode][k].k === 'skip';
     const c = k === i ? `cur ${cls}` : sk ? 'skip' : k < i ? 'done' : '';
-    return `<div class="st ${c}"><span class="n">${k + 1}</span><span>${x.t}<div class="d">${x.d}</div></span></div>`;
+    return `<div class="st ${c}"><span class="n" ${k === i ? 'data-fid="ptr"' : ''}>${k + 1}</span><span>${x.t}<div class="d">${x.d}</div></span></div>`;
   }).join('');
   $('sql').innerHTML = s.sql;
   $('heap').innerHTML = s.heap;
   $('prev').disabled = i === 0; $('next').disabled = i === 4;
   $('dots').innerHTML = [0, 1, 2, 3, 4].map(k => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
-  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+  document.querySelectorAll('.dot').forEach(d => d.onclick = () => go(mode, +d.dataset.k));
 }
-document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
-  mode = b.dataset.m;
-  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); render();
-});
-$('next').onclick = () => { i++; render(); };
-$('prev').onclick = () => { i--; render(); };
+
+// ── 모션: 렌더 전후 위치를 비교해 같은 data-fid는 미끄러지고, 새로 생긴 건 종류별로 등장 (FLIP)
+const MOTION = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+const EASE = 'cubic-bezier(.2,.8,.2,1)';
+// 위치는 .stage 기준 — 위쪽 설명 박스 높이가 바뀌어도 전체가 출렁이지 않게
+function pos(el) { const r = el.getBoundingClientRect(), c = el.closest('.stage'); if (!c) return r; const k = c.getBoundingClientRect(); return { left: r.left - k.left, top: r.top - k.top }; }
+function snap() { document.getAnimations().forEach(a => { if (!(a instanceof CSSAnimation)) a.finish(); }); const m = new Map(); document.querySelectorAll('[data-fid]').forEach(el => m.set(el.dataset.fid, pos(el))); return m; }
+function flash(el, delay = 0) { el.animate([{ boxShadow: '0 0 0 4px #f5b84a, 0 0 22px rgba(245,184,74,.6)', borderRadius: '8px' }, { boxShadow: '0 0 0 0 transparent', borderRadius: '8px' }], { duration: 1300, delay, easing: 'ease-out' }); }
+function play(before) {
+  if (!MOTION || !before) return;
+  document.querySelectorAll('[data-fid]').forEach(el => {
+    const a = pos(el), b = before.get(el.dataset.fid);
+    if (b) {
+      const dx = b.left - a.left, dy = b.top - a.top;
+      if (Math.abs(dx) + Math.abs(dy) > 1) el.animate([{ transform: `translate(${dx}px, ${dy}px)`, zIndex: 9 }, { transform: 'none', zIndex: 9 }], { duration: 460, easing: EASE });
+      return;
+    }
+    const p = el.dataset.pop;
+    if (p === 'slide') { el.animate([{ opacity: 0, transform: 'translateX(-30px)' }, { opacity: 1, transform: 'none' }], { duration: 450, easing: EASE }); flash(el, 300); }
+    else if (p === 'shake') el.animate([{ transform: 'scale(.8)', opacity: 0 }, { transform: 'scale(1)', opacity: 1, offset: .3 }, { transform: 'translateX(-8px)', offset: .45 }, { transform: 'translateX(8px)', offset: .6 }, { transform: 'translateX(-5px)', offset: .75 }, { transform: 'none' }], { duration: 650, easing: 'ease-out' });
+    else if (p === 'flash') { el.animate([{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: EASE }); flash(el, 150); }
+    else el.animate([{ opacity: 0, transform: 'scale(.7)' }, { opacity: 1, transform: 'scale(1.05)', offset: .7 }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'ease-out' });
+  });
+}
+function go(m, n) {
+  const b = snap(); mode = m; i = n;
+  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x.dataset.m === mode));
+  render(); play(b);
+  if (MOTION) [...$('narr').children].forEach((el, k) => el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 350, delay: k * 40, easing: EASE, fill: 'backwards' }));
+}
+document.querySelectorAll('.modes button').forEach(btn => btn.onclick = () => go(btn.dataset.m, i));
+$('next').onclick = () => go(mode, i + 1);
+$('prev').onclick = () => go(mode, i - 1);
 document.addEventListener('keydown', e => {
-  if (e.key === 'ArrowRight' && i < 4) { i++; render(); }
-  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+  if (e.key === 'ArrowRight' && i < 4) go(mode, i + 1);
+  if (e.key === 'ArrowLeft' && i > 0) go(mode, i - 1);
 });
 const h = location.hash.slice(1).match(/^([ABC])?(\d)?$/);
 if (h) { if (h[1]) { mode = h[1]; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x.dataset.m === mode)); } if (h[2]) i = Math.min(+h[2] - 1, 4); }
