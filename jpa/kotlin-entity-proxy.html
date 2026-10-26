@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kotlin 엔티티와 JPA: 생성자 · final · LAZY 프록시</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13px; overflow-x: auto; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .vi { color: var(--violet); } .bl { color: var(--blue); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; font-size: 14px; }
+  .card.no { border-color: var(--no); } .card.ok { border-color: var(--ok); }
+  .card .t { font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  button { font: inherit; padding: 10px 18px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  button:disabled { opacity: .4; cursor: default; }
+
+  /* 요구 조건 2개 */
+  .req { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .rq { border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; background: #141a21; }
+  .rq h3 { margin: 0 0 6px; font-size: 16px; }
+  .rq .why { font-size: 14px; }
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; }
+  .flow .b { padding: 6px 10px; border-radius: 8px; background: #252d38; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .flow .a { color: var(--dim); }
+
+  /* 시나리오 */
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .modes button.on { border-color: var(--mid); background: #2a2416; }
+  .narr { border: 2px solid var(--blue); border-radius: 14px; background: #131d2a; padding: 14px 18px; margin-bottom: 16px; min-height: 120px; }
+  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .narr .title { font-size: 20px; font-weight: 800; margin: 2px 0 8px; }
+  .narr.bad { border-color: var(--no); background: #2c1a1e; } .narr.bad .step { color: var(--no); }
+  .narr.warn { border-color: var(--mid); background: #2a2416; } .narr.warn .step { color: var(--mid); }
+  .narr.good { border-color: var(--ok); background: #16291f; } .narr.good .step { color: var(--ok); }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+  .lane-t { font-size: 13px; color: var(--dim); margin: 0 0 6px; font-weight: 700; }
+  .lane-t b { color: var(--text); }
+  .bc { border: 2px solid var(--line); border-radius: 12px; background: #0d1116; padding: 10px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.9; margin-bottom: 14px; }
+  .bc .row { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); }
+  .bc .row:last-child { border-bottom: none; }
+  .tag { display: inline-block; padding: 0 9px; border-radius: 99px; font-weight: 700; font-size: 12px; font-family: -apple-system, sans-serif; }
+  .tag.bad { background: #3a1a22; color: var(--no); } .tag.good { background: #183a2b; color: var(--ok); }
+  .steps { display: flex; flex-direction: column; gap: 6px; }
+  .st { display: grid; grid-template-columns: 30px 1fr; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; background: #141a21; border: 2px solid var(--line); font-size: 14px; }
+  .st .n { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; font-weight: 700; }
+  .st .d { font-size: 12.5px; color: var(--dim); }
+  .st.done { opacity: .55; } .st.skip { opacity: .3; text-decoration: line-through; }
+  .st.cur { border-color: var(--blue); background: #1b2a40; opacity: 1; } .st.cur .n { background: var(--blue); color: #0f1419; }
+  .st.cur.bad { border-color: var(--no); background: #3a1a22; } .st.cur.bad .n { background: var(--no); }
+  .st.cur.warn { border-color: var(--mid); background: #2a2416; } .st.cur.warn .n { background: var(--mid); }
+  .sql { border: 2px solid var(--line); border-radius: 12px; background: #0d1116; padding: 10px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; min-height: 92px; margin-bottom: 14px; }
+  .sql .q { padding: 3px 8px; border-radius: 6px; background: #13202f; color: var(--blue); margin: 4px 0; }
+  .sql .q.early { background: #2a2416; color: var(--mid); }
+  .sql .q.ex { background: #3a1a22; color: var(--no); }
+  .heap { border: 2px solid var(--line); border-radius: 14px; padding: 14px; background: #11161c; display: grid; gap: 12px; min-height: 200px; align-content: start; }
+  .obj { border-radius: 12px; padding: 10px 14px; }
+  .obj .h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 800; }
+  .obj .f { font-family: ui-monospace, Menlo, monospace; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; padding: 3px 8px; border-radius: 6px; background: #0d1116; margin-top: 4px; }
+  .obj .note { font-size: 12.5px; color: var(--dim); margin-top: 6px; }
+  .post { border: 2px solid var(--blue); background: #13202f; } .post .h { color: var(--blue); }
+  .real { border: 2px solid var(--ok); background: #11201a; } .real .h { color: var(--ok); }
+  .prx { border: 2px dashed var(--violet); background: #1a1626; } .prx .h { color: var(--violet); }
+  .boom { border: 2px solid var(--no); background: #2c1a1e; color: var(--no); font-weight: 700; text-align: center; padding: 18px; border-radius: 12px; }
+  .empty { color: var(--dim); text-align: center; padding: 24px; border: 2px dashed var(--line); border-radius: 12px; }
+  .chg { box-shadow: 0 0 0 3px var(--mid); }
+  .ctrl { display: flex; gap: 10px; align-items: center; margin: 16px 0 0; flex-wrap: wrap; }
+  .dots { display: flex; gap: 6px; }
+  .dot { width: 28px; height: 28px; border-radius: 50%; background: #252d38; text-align: center; line-height: 28px; font-size: 12px; cursor: pointer; }
+  .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
+  @media (max-width: 1000px) { .two, .stage, .req { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Kotlin 엔티티와 JPA: 생성자 · final · LAZY 프록시</h1>
+  <div class="sub">2026-10-26 모의면접 꼬리질문 Q1-7 · "kotlin-spring을 켰는데 왜 엔티티의 LAZY는 안 되나?"</div>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">1</span>질문 · 내 답 · 판정</h2>
+<pre><code>@Entity
+class Post(
+    @ManyToOne(fetch = FetchType.LAZY)
+    val author: Author,
+    val title: String,
+) {
+    @Id @GeneratedValue
+    val id: Long? = null
+}</code></pre>
+    <p style="margin:12px 0 6px"><b>Q1-7.</b> kotlin-spring 플러그인을 켰고 <code>@Service</code>의 <code>@Transactional</code>은 잘 된다. 그런데 이 엔티티의 <code>LAZY</code>는 동작하지 않는다(환경에 따라 생성 에러도 난다). 왜? JPA가 엔티티에 요구하는 조건 중 무엇을 어기나?</p>
+    <div class="two">
+      <div class="card no"><div class="t">내 답변 (원문)</div>"모르겠음"<div style="margin-top:8px" class="no">❌ 모름 (깊이 0)</div></div>
+      <div class="card ok"><div class="t">정답</div>
+        JPA가 요구하는 두 조건을 <b>둘 다</b> 어긴다.<br>
+        ① <b>인자 없는 생성자가 없다</b> → Hibernate가 객체를 못 만든다 (에러)<br>
+        ② <b>클래스가 final이다</b> (kotlin-spring은 <code>@Entity</code>를 안 연다) → LAZY용 프록시를 못 만든다 → 즉시 조회로 바뀜</div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">2</span>JPA가 엔티티 클래스에 요구하는 것 두 가지 — 왜 필요한가</h2>
+    <div class="req">
+      <div class="rq" style="border-color:var(--blue)">
+        <h3 class="bl">① 인자 없는 생성자 <span class="dim" style="font-weight:500;font-size:13px">(public 또는 protected)</span></h3>
+        <div class="why">Hibernate는 DB 행을 객체로 만들 때 <b>"일단 빈 객체를 만들고 → 필드를 하나씩 채우는"</b> 방식을 씁니다. 생성자 파라미터에 무엇을 넣어야 할지 Hibernate는 모르기 때문이에요.</div>
+        <div class="flow"><span class="b">DB 행</span><span class="a">→</span><span class="b">new Post()</span><span class="a">→</span><span class="b">id = 1</span><span class="a">→</span><span class="b">title = "hi"</span><span class="a">→</span><span class="b">author = ?</span></div>
+        <div class="key" style="font-size:14px">Kotlin <code>class Post(val author: Author, val title: String)</code>에는 <b><code>Post(Author, String)</code> 생성자 하나뿐</b>. <code>new Post()</code>를 부를 수 없다.</div>
+      </div>
+      <div class="rq" style="border-color:var(--violet)">
+        <h3 class="vi">② final이 아닐 것 <span class="dim" style="font-weight:500;font-size:13px">(클래스 · 메서드)</span></h3>
+        <div class="why"><code>LAZY</code>는 "진짜 Author 대신 <b>Author를 상속한 프록시 클래스</b>의 객체를 끼워 두고, 처음 쓸 때 SELECT" 하는 방식입니다. 오늘 Q1-4~5의 CGLIB와 <b>같은 원리 — 상속</b>이에요.</div>
+        <div class="flow"><span class="b">Author</span><span class="a">← extends ←</span><span class="b vi">Author 프록시</span><span class="a">(id=7만 가짐, 나머지 비어 있음)</span></div>
+        <div class="key" style="font-size:14px">Kotlin은 <b>기본이 final</b>. kotlin-spring이 여는 목록(<code>@Component</code>, <code>@Transactional</code> …)에 <b><code>@Entity</code>는 없다</b>. → <code>Author</code>는 final → 상속 불가.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="num">3</span><code>postRepository.findById(1)</code> 한 번을 단계별로 — 설정 3가지 비교</h2>
+    <div class="dim" style="font-size:14px;margin-bottom:12px">설정 버튼을 바꾸면 같은 단계에서 무엇이 달라지는지 보입니다. 오른쪽 위 = 실제로 DB에 나간 SQL, 아래 = 힙에 만들어진 객체. ← → 키로 이동.</div>
+    <div class="modes">
+      <button data-m="A" class="on">❶ kotlin-spring만 (질문 상황)</button>
+      <button data-m="B">❷ + plugin.jpa</button>
+      <button data-m="C">❸ + plugin.jpa + allOpen(@Entity)</button>
+    </div>
+
+    <div class="narr" id="narr"></div>
+
+    <div class="stage">
+      <div>
+        <div class="lane-t">🔧 <b>컴파일 결과</b> — 바이트코드에서 본 클래스 모양</div>
+        <div class="bc" id="bc"></div>
+        <div class="lane-t">🪜 <b>Hibernate가 하는 일</b></div>
+        <div class="steps" id="steps"></div>
+      </div>
+      <div>
+        <div class="lane-t">🗄 <b>DB로 나간 SQL</b></div>
+        <div class="sql" id="sql"></div>
+        <div class="lane-t">🧠 <b>힙 메모리</b> — 만들어진 객체</div>
+        <div class="heap" id="heap"></div>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <button id="prev">◀ 이전</button>
+      <button id="next" class="primary">다음 ▶</button>
+      <div class="dots" id="dots"></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <h2><span class="num">4</span>정리 — 플러그인이 각각 해 주는 일</h2>
+    <table>
+      <tr><th>설정</th><th>대상</th><th>해 주는 일</th><th>안 해 주는 일</th></tr>
+      <tr><td><code>kotlin("plugin.spring")</code></td><td><code>@Component</code> 계열 · <code>@Transactional</code> · <code>@Async</code> · <code>@Cacheable</code> …</td><td>클래스 · 메서드를 <b>open</b>으로</td><td class="no"><code>@Entity</code>는 대상 아님</td></tr>
+      <tr><td><code>kotlin("plugin.jpa")</code></td><td><code>@Entity</code> · <code>@Embeddable</code> · <code>@MappedSuperclass</code></td><td><b>인자 없는 생성자</b> 생성 (①)</td><td class="no"><b>open은 안 해 줌</b> ← 가장 흔한 착각</td></tr>
+      <tr><td><code>allOpen { annotation(...) }</code></td><td>직접 지정한 어노테이션</td><td>클래스 · 메서드를 <b>open</b>으로 (②)</td><td>—</td></tr>
+    </table>
+<pre style="margin-top:14px"><code>plugins {
+    kotlin("plugin.spring")
+    kotlin("plugin.jpa")
+}
+allOpen {
+    annotation("jakarta.persistence.Entity")
+    annotation("jakarta.persistence.MappedSuperclass")
+    annotation("jakarta.persistence.Embeddable")
+}</code></pre>
+    <table style="margin-top:16px">
+      <tr><th></th><th>Spring AOP 프록시 (Q1-4~5)</th><th>Hibernate LAZY 프록시 (Q1-7)</th></tr>
+      <tr><td>무엇을 상속하나</td><td><code>OrderService</code></td><td><code>Author</code></td></tr>
+      <tr><td>언제 만드나</td><td>기동 시 빈 생성 ⑥ 단계</td><td>엔티티를 조회해 LAZY 필드를 채울 때</td></tr>
+      <tr><td>final이면</td><td>클래스: 기동 실패 / 메서드: 트랜잭션 무시 + NPE</td><td>프록시 못 만듦 → <b>즉시 조회로 바뀜 (LAZY 무효)</b></td></tr>
+      <tr><td>Kotlin 해결</td><td><code>plugin.spring</code></td><td><code>plugin.jpa</code> + <code>allOpen(@Entity)</code></td></tr>
+    </table>
+    <div class="say">면접용: <b>"JPA 엔티티는 Hibernate가 리플렉션으로 빈 객체를 만들 수 있도록 인자 없는 생성자가 필요하고, 지연 로딩 프록시가 엔티티를 상속하므로 final이면 안 됩니다. Kotlin은 둘 다 기본으로 어기기 때문에 plugin.jpa로 생성자를 만들고, allOpen으로 @Entity 클래스를 open으로 엽니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1">Jakarta Persistence 3.1 §2.1 The Entity Class</a>
+      (<i>"The entity class must have a no-arg constructor… The entity class must not be final. No methods or persistent instance variables of the entity class may be final."</i>) ·
+      <a style="color:var(--blue)" href="https://kotlinlang.org/docs/no-arg-plugin.html">Kotlin — No-arg compiler plugin (JPA support)</a> ·
+      <a style="color:var(--blue)" href="https://kotlinlang.org/docs/all-open-plugin.html">Kotlin — All-open compiler plugin (Spring support)</a> ·
+      <a style="color:var(--blue)" href="https://spring.io/guides/tutorials/spring-boot-kotlin">Spring Guide — Building web applications with Spring Boot and Kotlin (allOpen for JPA)</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const BC = {
+  A: [['class Post', 'public <b>final</b> class Post', 'bad'], ['생성자', 'Post(Author, String) <b>하나뿐</b>', 'bad'], ['class Author', 'public <b>final</b> class Author', 'bad']],
+  B: [['class Post', 'public <b>final</b> class Post', 'bad'], ['생성자', 'Post(Author, String) + <b>Post()</b> ← plugin.jpa가 생성', 'good'], ['class Author', 'public <b>final</b> class Author', 'bad']],
+  C: [['class Post', 'public class Post', 'good'], ['생성자', 'Post(Author, String) + <b>Post()</b>', 'good'], ['class Author', 'public class Author ← allOpen이 엶', 'good']],
+};
+const STEPS = [
+  { t: 'SELECT post 실행', d: 'findById(1) → DB에서 행 하나를 받음' },
+  { t: '빈 Post 객체 만들기', d: '리플렉션으로 인자 없는 생성자 new Post() 호출' },
+  { t: 'id · title 채우기', d: 'DB 컬럼 값을 필드에 직접 대입' },
+  { t: 'author 채우기 (LAZY)', d: 'author_id = 7 → Author 프록시를 만들어 끼우려 함' },
+  { t: '내 코드: post.author.name', d: '여기서 처음 Author 내용이 필요해짐' },
+];
+const Q1 = `<div class="q">select id, title, author_id from post where id = 1<br><span class="dim">→ { id: 1, title: "hi", author_id: 7 }</span></div>`;
+const QA = (early) => `<div class="q ${early ? 'early' : ''}">select * from author where id = 7${early ? '  <b>← LAZY인데 지금 나감</b>' : ''}</div>`;
+const POST = (f) => `<div class="obj post"><div class="h"><span>Post</span><span class="dim" style="font-weight:500;font-size:12px">진짜 엔티티</span></div>
+  <div class="f"><span>id</span><span>${f.id ?? '<span class="dim">null</span>'}</span></div>
+  <div class="f"><span>title</span><span>${f.title ?? '<span class="dim">null</span>'}</span></div>
+  <div class="f"><span>author</span><span>${f.author ?? '<span class="dim">null</span>'}</span></div></div>`;
+const REAL = `<div class="obj real"><div class="h"><span>Author (진짜)</span><span class="dim" style="font-weight:500;font-size:12px">이미 DB에서 다 읽어옴</span></div>
+  <div class="f"><span>id</span><span>7</span></div><div class="f"><span>name</span><span>"kim"</span></div></div>`;
+const PRX = (loaded) => `<div class="obj prx"><div class="h"><span>Author 프록시 (Author를 상속)</span><span style="font-size:12px">${loaded ? '초기화됨' : '아직 비어 있음'}</span></div>
+  <div class="f"><span>id</span><span>7</span></div><div class="f"><span>name</span><span>${loaded ? '"kim" <span class="dim">(target에서)</span>' : '<span class="dim">? (모름)</span>'}</span></div>
+  <div class="note">${loaded ? 'name이 필요해진 순간 SELECT를 보내 진짜 Author를 target으로 연결' : 'post 테이블의 author_id로 id만 알고 있음 — 08-10 "프록시는 식별자를 이미 갖고 있다"'}</div></div>`;
+const BOOM = m => `<div class="boom">💥 ${m}</div>`;
+const EMPTY = '<div class="empty">아직 객체 없음</div>';
+
+const S = {
+  A: [
+    { k: 'n', sql: Q1, heap: EMPTY, t: 'SELECT post — 여기까진 문제없음', d: 'SQL은 정상으로 나가고 DB가 행 하나를 돌려줍니다. 문제는 이 행을 <b>객체로 바꾸는</b> 다음 단계부터예요.' },
+    { k: 'bad', sql: Q1 + `<div class="q ex">InstantiationException: No default constructor for entity 'Post'</div>`, heap: BOOM('new Post() 호출 불가 — 그런 생성자가 없음'),
+      t: '💥 빈 Post를 못 만든다 → 조회 실패', d: '바이트코드에 <code>Post(Author, String)</code>밖에 없어서 Hibernate가 <code>new Post()</code>를 부를 수 없습니다. <b>조건 ①</b> 위반. 여기서 끝 — 뒤 단계는 실행되지 않아요. (질문의 "환경에 따라 나는 에러"가 이것)' },
+    { k: 'skip', sql: Q1, heap: BOOM('2단계에서 중단'), t: '실행 안 됨', d: '2단계에서 예외로 중단됐습니다. <b>❷ + plugin.jpa</b> 버튼을 눌러 생성자를 해결해 보세요.' },
+    { k: 'skip', sql: Q1, heap: BOOM('2단계에서 중단'), t: '실행 안 됨', d: '' },
+    { k: 'skip', sql: Q1, heap: BOOM('2단계에서 중단'), t: '실행 안 됨', d: '' },
+  ],
+  B: [
+    { k: 'n', sql: Q1, heap: EMPTY, t: 'SELECT post', d: '같은 SQL, 같은 행.' },
+    { k: 'n', sql: Q1, heap: POST({}), t: '✅ new Post() 성공 — 필드가 전부 비어 있는 객체', d: 'plugin.jpa가 바이트코드에 <code>Post()</code>를 만들어 줬습니다(코드에서 직접 부를 순 없고 리플렉션 전용). 조건 ① 해결. 지금 Post는 <b>모든 필드가 null인 빈 객체</b>예요.' },
+    { k: 'n', sql: Q1, heap: POST({ id: '1', title: '"hi"' }), t: 'id · title 채우기', d: 'Hibernate가 리플렉션으로 필드에 직접 값을 넣습니다. <code>val</code>이어도 리플렉션은 넣을 수 있어요.' },
+    { k: 'warn', sql: Q1 + QA(true), heap: POST({ id: '1', title: '"hi"', author: '→ Author (진짜)' }) + REAL,
+      t: '⚠️ Author가 final → 프록시를 못 만든다 → 그 자리에서 SELECT author', d: 'LAZY라서 Author 프록시를 끼우려 했지만, 프록시는 <b>Author를 상속</b>해야 하는데 Author가 <b>final</b>입니다(조건 ② 위반). Hibernate는 프록시 대신 <b>지금 바로 author를 조회</b>해 진짜 객체를 넣습니다. <b>에러는 안 납니다</b> — 그래서 눈치채기 어려워요.' },
+    { k: 'warn', sql: Q1 + QA(true), heap: POST({ id: '1', title: '"hi"', author: '→ Author (진짜)' }) + REAL,
+      t: 'post.author.name — 새 SQL 없음. 이미 읽어 왔으니까', d: '결과만 보면 정상 동작이라 놓치기 쉽습니다. 하지만 <b>name을 안 쓰는 화면에서도 author SELECT가 항상 나갑니다.</b> Post 100건 목록이면 author 조회가 매번 따라붙어요 — LAZY를 건 의미(필요할 때만 조회)가 사라진 상태.' },
+  ],
+  C: [
+    { k: 'n', sql: Q1, heap: EMPTY, t: 'SELECT post', d: '같은 SQL, 같은 행.' },
+    { k: 'n', sql: Q1, heap: POST({}), t: '✅ new Post() 성공', d: '조건 ① 해결 (plugin.jpa).' },
+    { k: 'n', sql: Q1, heap: POST({ id: '1', title: '"hi"' }), t: 'id · title 채우기', d: '' },
+    { k: 'good', sql: Q1, heap: POST({ id: '1', title: '"hi"', author: '→ <span class="vi">Author 프록시</span>' }) + PRX(false),
+      t: '✅ Author가 open → 프록시 생성 → SQL 안 나감', d: 'allOpen이 Author를 열어 줬으니 Hibernate가 <b>Author를 상속한 프록시</b>를 만들 수 있습니다(조건 ② 해결). post 행에 있던 <code>author_id = 7</code>만 넣어 둔 상태. <b>author SELECT는 아직 0번.</b>' },
+    { k: 'good', sql: Q1 + QA(false), heap: POST({ id: '1', title: '"hi"', author: '→ <span class="vi">Author 프록시</span>' }) + PRX(true),
+      t: '✅ post.author.name → 이때 처음 SELECT author', d: '프록시가 오버라이드한 <code>getName()</code>이 호출을 가로채 그제야 SELECT를 보냅니다. <b>이게 원래 의도한 LAZY.</b> name을 안 쓰는 화면이라면 이 SQL은 끝까지 나가지 않아요.' },
+  ],
+};
+let mode = 'A', i = 0;
+function render() {
+  const s = S[mode][i];
+  const cls = { bad: 'bad', warn: 'warn', good: 'good' }[s.k] || '';
+  $('narr').className = 'narr ' + cls;
+  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / 5 · ${document.querySelector('.modes button.on').textContent}</div><div class="title">${s.t}</div><div>${s.d}</div>`;
+  $('bc').innerHTML = BC[mode].map(([k, v, c]) => `<div class="row"><span class="dim">${k}</span><span>${v} <span class="tag ${c}">${c === 'bad' ? '❌' : '✅'}</span></span></div>`).join('');
+  $('steps').innerHTML = STEPS.map((x, k) => {
+    const sk = S[mode][k].k === 'skip';
+    const c = k === i ? `cur ${cls}` : sk ? 'skip' : k < i ? 'done' : '';
+    return `<div class="st ${c}"><span class="n">${k + 1}</span><span>${x.t}<div class="d">${x.d}</div></span></div>`;
+  }).join('');
+  $('sql').innerHTML = s.sql;
+  $('heap').innerHTML = s.heap;
+  $('prev').disabled = i === 0; $('next').disabled = i === 4;
+  $('dots').innerHTML = [0, 1, 2, 3, 4].map(k => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
+  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+}
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m;
+  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); render();
+});
+$('next').onclick = () => { i++; render(); };
+$('prev').onclick = () => { i--; render(); };
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' && i < 4) { i++; render(); }
+  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+});
+const h = location.hash.slice(1).match(/^([ABC])?(\d)?$/);
+if (h) { if (h[1]) { mode = h[1]; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x.dataset.m === mode)); } if (h[2]) i = Math.min(+h[2] - 1, 4); }
+render();
+</script>
+</body>
+</html>
