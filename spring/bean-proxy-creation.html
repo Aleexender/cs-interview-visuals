@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>빈 생성과 프록시 바꿔치기: 원본은 언제, 누가 프록시로 바꾸나</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13px; overflow-x: auto; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .vi { color: var(--violet); } .bl { color: var(--blue); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; font-size: 14px; }
+  .card.no { border-color: var(--no); } .card.ok { border-color: var(--ok); }
+  .card .t { font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  button { font: inherit; padding: 8px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  button:disabled { opacity: .4; cursor: default; }
+
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .modes button.on { border-color: var(--mid); background: #2a2416; }
+  .walk { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; }
+  .lane-t { font-size: 12.5px; color: var(--dim); margin-bottom: 6px; font-weight: 700; }
+  .lane-t b { color: var(--text); }
+
+  /* 조립 라인 */
+  .line { display: flex; flex-direction: column; gap: 6px; }
+  .stg { display: grid; grid-template-columns: 30px 1fr; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 10px; background: #141a21; border: 2px solid var(--line); font-size: 13.5px; }
+  .stg .n { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; font-weight: 700; }
+  .stg .d { font-size: 12px; color: var(--dim); }
+  .stg.done { opacity: .55; }
+  .stg.cur { border-color: var(--blue); background: #1b2a40; opacity: 1; }
+  .stg.cur .n { background: var(--blue); color: #0f1419; }
+  .stg.cur.star { border-color: var(--violet); background: #2a2140; }
+  .stg.cur.star .n { background: var(--violet); }
+  .stg.grp { background: none; border: none; padding: 2px 4px; font-size: 12px; color: var(--dim); font-weight: 700; display: block; }
+
+  /* 오른쪽 */
+  .right { display: grid; gap: 12px; align-content: start; }
+  .who { padding: 8px 12px; border-radius: 10px; font-size: 13.5px; background: #1a1810; color: var(--mid); border: 1px solid var(--line); }
+  .who b { color: var(--text); }
+  .bench { border: 2px solid var(--line); border-radius: 12px; padding: 12px; background: #11161c; min-height: 132px; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  .obj { border-radius: 12px; padding: 10px 14px; font-size: 13.5px; text-align: center; }
+  .obj .tag { font-family: ui-monospace, Menlo, monospace; font-weight: 800; font-size: 15px; }
+  .obj .s { font-size: 12px; color: var(--dim); }
+  .orig { border: 2px solid var(--blue); background: #13202f; }
+  .orig .tag { color: var(--blue); }
+  .prx { border: 2px dashed var(--violet); background: #1a1626; padding: 10px 12px 12px; }
+  .prx > .tag { color: var(--violet); }
+  .prx .inner { margin-top: 8px; }
+  .gate { font-size: 12px; padding: 3px 8px; border-radius: 7px; background: #2a2140; color: var(--violet); margin: 6px 0; }
+  .ghost { color: var(--dim); font-size: 13px; border: 2px dashed var(--line); border-radius: 12px; padding: 18px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .box { border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; font-size: 13px; }
+  .box .t { font-weight: 700; font-size: 12.5px; margin-bottom: 6px; }
+  .map .r { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .map .r:last-child { border-bottom: none; }
+  .chip { display: inline-block; padding: 0 8px; border-radius: 99px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .chip.o { background: #13304d; color: var(--blue); }
+  .chip.p { background: #2a2140; color: var(--violet); }
+  .chip.c { background: #183a2b; color: var(--ok); }
+  .chip.x { background: #252d38; color: var(--dim); }
+  .chg { box-shadow: 0 0 0 2px var(--mid); }
+  .ctrl { display: flex; gap: 10px; align-items: center; margin: 16px 0 12px; flex-wrap: wrap; }
+  .dots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dot { width: 26px; height: 26px; border-radius: 50%; background: #252d38; text-align: center; line-height: 26px; font-size: 12px; cursor: pointer; }
+  .dot.on { background: var(--blue); color: #0f1419; font-weight: 700; }
+  .narr { border: 1px solid var(--line); border-radius: 12px; background: #141a21; padding: 14px 16px; min-height: 110px; }
+  .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .narr .title { font-size: 17px; font-weight: 700; margin: 2px 0 6px; }
+  .pack { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .pack .card { text-align: center; }
+  .pack .big { font-size: 28px; }
+  @media (max-width: 960px) { .two, .walk, .row3, .pack { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>빈 생성과 프록시 바꿔치기: 원본은 언제, 누가 프록시로 바꾸나</h1>
+  <div class="sub">2026-10-26 모의면접 꼬리질문 Q1-3 · "컨트롤러가 받은 건 프록시인데, 컨테이너는 원본을 만들었다. 그 사이에 무슨 일이?"</div>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">1</span>질문 · 내 답 · 판정</h2>
+<pre><code>@Service
+public class OrderService {
+    <span class="vi">@Transactional</span>
+    public void order(Long itemId) { ... }
+}
+
+@RestController
+@RequiredArgsConstructor
+public class OrderController {
+    private final OrderService orderService;   <span class="dim">// ← 여기에 든 건 무엇?</span>
+}</code></pre>
+    <p style="margin:12px 0 6px"><b>Q1-3.</b> 컨테이너는 리플렉션으로 <b>원본</b> OrderService를 만든다. 그런데 컨트롤러가 받은 건 <b>프록시</b>다. 원본이 프록시로 바뀌는 일은 빈 생성 과정의 <b>어느 시점에, 누가</b> 하나? 컨테이너에 등록되는 건 어느 쪽인가?</p>
+    <div class="two">
+      <div class="card no"><div class="t">내 답변 (원문)</div>"이건 잘 모르겠어"
+        <div style="margin-top:8px" class="no">❌ 모름 (깊이 0). 직전 Q1-2에서 "필드에 든 건 프록시"는 정답 — <b>무엇</b>은 알고 <b>언제·누가</b>를 모름</div></div>
+      <div class="card ok"><div class="t">정답</div>
+        <b>초기화가 끝난 직후(⑤), <code>BeanPostProcessor</code>인 Auto Proxy Creator가</b> 원본을 감싼 프록시를 <b>반환</b>한다.
+        컨테이너는 <b>반환받은 객체</b>를 등록하므로 저장소에는 <b>프록시</b>가 들어가고, 원본은 프록시 안의 <code>target</code>으로만 남는다.</div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">2</span>단계별로 따라가기 — 원본 <span class="bl">@1</span>과 프록시 <span class="vi">@2</span></h2>
+    <div class="dim" style="font-size:14px;margin-bottom:12px">왼쪽 = 빈 하나가 만들어지는 조립 라인. 오른쪽 = 지금 작업대 위의 객체 · 싱글톤 저장소 · 컨트롤러 필드. <span class="vi">보라 칸</span> = 바꿔치기가 일어나는 지점. 노란 테두리 = 이번 단계에 바뀐 것. ← → 키.</div>
+    <div class="modes">
+      <button data-m="TX" class="on">@Transactional 있음 (질문 상황)</button>
+      <button data-m="PLAIN">@Transactional 없음 (비교)</button>
+    </div>
+    <div class="walk">
+      <div>
+        <div class="lane-t">🏭 <b>조립 라인</b> — OrderService 빈 하나의 일생</div>
+        <div class="line" id="line"></div>
+      </div>
+      <div class="right">
+        <div class="who" id="who"></div>
+        <div><div class="lane-t">🛠 <b>작업대</b> — 지금 손에 든 객체</div><div class="bench" id="bench"></div></div>
+        <div class="row3">
+          <div class="box map" id="mapBox"><div class="t">📦 싱글톤 저장소 (이름 → 객체)</div><div id="map"></div></div>
+          <div class="box" id="ctrlBox"><div class="t">🎮 OrderController.orderService 필드</div><div id="field"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="ctrl">
+      <button id="prev">◀ 이전</button>
+      <button id="next" class="primary">다음 ▶</button>
+      <div class="dots" id="dots"></div>
+    </div>
+    <div class="narr" id="narr"></div>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="num">3</span>택배 포장대로 기억하기</h2>
+    <div class="pack">
+      <div class="card"><div class="big">🔨</div><b>①~④ 물건 완성</b><div class="dim" style="font-size:13px">원본 @1 생성 · 주입 · 초기화</div></div>
+      <div class="card" style="border-color:var(--violet)"><div class="big">📦</div><b class="vi">⑤ 포장대</b><div class="dim" style="font-size:13px">BeanPostProcessor가 상자(@2)에 넣음</div></div>
+      <div class="card"><div class="big">🏬</div><b>⑥ 창고 보관</b><div class="dim" style="font-size:13px">상자째로 저장소에</div></div>
+      <div class="card"><div class="big">🙋</div><b>꺼내 가는 사람</b><div class="dim" style="font-size:13px">컨트롤러는 상자를 받음</div></div>
+    </div>
+    <table style="margin-top:16px">
+      <tr><th>헷갈리는 말</th><th>정확한 말</th></tr>
+      <tr><td>"프록시는 <b>가짜</b> 객체"</td><td>프록시는 원본을 <b>품고 앞뒤를 감싸는</b> 객체. 원본도 실제로 만들어지고 비즈니스 로직은 원본이 실행한다</td></tr>
+      <tr><td>"컨테이너가 처음부터 프록시를 만든다"</td><td>먼저 <b>원본</b>을 만들고 초기화까지 끝낸 뒤 <b>⑤에서</b> 감싼다</td></tr>
+      <tr><td>"컨테이너가 바꿔치기한다"</td><td>바꾸는 건 <b>BeanPostProcessor</b>(Auto Proxy Creator). 컨테이너는 <b>반환받은 것을 등록</b>할 뿐</td></tr>
+      <tr><td>"<code>@Transactional</code>이 트랜잭션을 연다"</td><td>어노테이션은 메모. ⑤에서 그 메모를 보고 프록시를 만들지 결정하고, 호출 시 프록시 → <code>TransactionInterceptor</code> → <code>PlatformTransactionManager</code>가 연다</td></tr>
+    </table>
+    <div class="say">면접용: <b>"스프링은 기동 시점에 빈을 만들 때, 원본 객체를 생성하고 의존성 주입과 초기화를 마친 뒤 BeanPostProcessor의 postProcessAfterInitialization 단계에서 Auto Proxy Creator가 @Transactional 같은 Advisor가 적용되는지 확인합니다. 적용 대상이면 원본을 감싼 프록시를 반환하고, 컨테이너는 그 프록시를 빈으로 등록하므로 주입받는 쪽은 모두 프록시를 받습니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/beans/factory-extension.html">Spring Reference — Container Extension Points (BeanPostProcessor)</a>
+      (<i>"Some Spring AOP infrastructure classes are implemented as bean post-processors in order to provide proxy-wrapping logic."</i>) ·
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/aop-api/autoproxy.html">Spring Reference — Using the "auto-proxy" facility</a> ·
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html">Understanding the Spring Framework's Declarative Transaction Implementation</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const STAGES = [
+  { g: '설계도 단계' },
+  { k: 'scan', n: 'S', t: '컴포넌트 스캔 → BeanDefinition 등록', d: '아직 객체 없음. 설계도만' },
+  { k: 'need', n: 'C', t: 'OrderController 만들려다 멈춤', d: '생성자에 OrderService 필요 → 먼저 꺼내러 감' },
+  { g: 'OrderService 빈 하나의 일생' },
+  { k: '1', n: '①', t: '인스턴스화', d: '리플렉션으로 생성자 호출' },
+  { k: '2', n: '②', t: '의존성 주입', d: 'OrderService가 필요로 하는 빈들' },
+  { k: '3', n: '③', t: 'BPP before', d: 'postProcessBeforeInitialization' },
+  { k: '4', n: '④', t: '초기화', d: '@PostConstruct → afterPropertiesSet' },
+  { k: '5', n: '⑤', t: 'BPP after ★', d: 'postProcessAfterInitialization — Auto Proxy Creator', star: true },
+  { k: '6', n: '⑥', t: '등록', d: '⑤가 반환한 객체를 저장소에' },
+  { g: '그다음' },
+  { k: 'inj', n: 'C', t: 'OrderController 생성 재개', d: '저장소에서 꺼낸 것을 생성자에' },
+  { k: 'run', n: '▶', t: '요청: orderService.order(1L)', d: '런타임 — 기동이 끝난 뒤' },
+];
+const ORIG = (s = '원본 OrderService') => `<div class="obj orig"><div class="tag">@1</div><div class="s">${s}</div></div>`;
+const PROXY = (gate = false) => `<div class="obj prx"><div class="tag">@2</div><div class="s vi">OrderService 프록시</div>
+  ${gate ? '<div class="gate">TransactionInterceptor → 시작</div>' : ''}
+  <div class="inner">${ORIG('target = 원본')}</div>
+  ${gate ? '<div class="gate">→ commit / rollback</div>' : ''}</div>`;
+const GHOST = t => `<div class="ghost">${t}</div>`;
+const C = { o: '<span class="chip o">@1 원본</span>', p: '<span class="chip p">@2 프록시</span>', c: '<span class="chip c">컨트롤러</span>', x: '<span class="chip x">(없음)</span>' };
+
+const TX = [
+  { k: 'scan', who: '컨테이너 — 컴포넌트 스캔', bench: GHOST('📄 설계도만 있음 (BeanDefinition)<br>orderService · orderController'), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '기동 시작: @Service · @RestController를 찾아 설계도로 등록', d: '컨테이너 <code>refresh()</code>가 시작됩니다. 스캔 단계에서는 <b>객체를 만들지 않고</b> "어떤 클래스를 어떤 이름의 빈으로 만들지"라는 설계도(<code>BeanDefinition</code>)만 등록해요.' },
+  { k: 'need', who: '컨테이너 — getBean("orderController")', bench: GHOST('OrderController 생성자:<br><code>OrderController(OrderService orderService)</code><br>→ 재료가 없다!'), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '컨트롤러를 만들려니 OrderService가 필요 → 먼저 만들러 감', d: '싱글톤은 기동 시점에 <b>미리</b> 만듭니다(eager). 생성자 재료인 OrderService가 저장소에 없으니 <b>의존 대상부터</b> 만들어요. (Q1-1의 "의존 대상이 먼저")' },
+  { k: '1', who: '컨테이너(BeanFactory) — 리플렉션', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '① new OrderService() → 원본 @1 탄생', d: '여기서 만들어지는 건 <b>평범한 OrderService</b>예요. 트랜잭션 기능은 전혀 없습니다. 아직 저장소에도 안 들어갔어요.' },
+  { k: '2', who: '컨테이너 — 의존성 주입', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '② OrderService에 필요한 빈들을 넣음', d: '생성자 주입이었다면 ①에서 이미 들어갔고, 필드·세터 주입이라면 여기서 들어갑니다. 대상은 여전히 <b>@1</b>.' },
+  { k: '3', who: 'BeanPostProcessor들 — before', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '③ BPP before — 초기화 직전 훅', d: '여러 BeanPostProcessor가 차례로 @1을 받아 봅니다. 트랜잭션 프록시는 여기서 만들지 않아요.' },
+  { k: '4', who: '원본 @1 — 자기 초기화', bench: ORIG('원본 · @PostConstruct 실행 중'), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '④ @PostConstruct — 원본 @1 위에서 실행', d: '초기화 메서드는 <b>원본 @1</b>에서 돕니다. 이 시점엔 <b>프록시가 아직 존재하지 않아요.</b> (이 사실은 뒤의 꼬리질문에서 다시 씁니다.)' },
+  { k: '5', who: 'BeanPostProcessor — Auto Proxy Creator', bench: `${ORIG()}<div style="font-size:22px" class="vi">➜</div>${PROXY()}`, map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '⑤ ★ 검사: "@Transactional 있나?" → 있음 → @1을 감싼 @2를 반환', d: 'Auto Proxy Creator(<code>AnnotationAwareAspectJAutoProxyCreator</code> 계열)가 이 빈에 맞는 Advisor를 찾습니다. 트랜잭션 Advisor가 매칭되니 <b>@1을 target으로 품은 프록시 @2</b>를 만들어 <b>@1 대신 @2를 반환</b>해요. BeanPostProcessor는 받은 것과 <b>다른 객체를 돌려줄 수 있다</b>는 게 핵심입니다.' },
+  { k: '6', who: '컨테이너 — 등록', bench: PROXY(), map: { os: 'p', oc: 'x' }, field: '아직 컨트롤러 없음',
+    t: '⑥ 반환받은 @2를 저장소에 등록', d: '컨테이너는 ⑤가 <b>돌려준 것</b>을 그대로 저장합니다. 저장소에 <code>"orderService" → @2</code>. 원본 @1은 저장소에 없고 <b>@2 안에만</b> 있어요.' },
+  { k: 'inj', who: '컨테이너 — OrderController 생성 재개', bench: `<div class="obj" style="border:2px solid var(--ok);background:#11201a"><div class="tag ok">OrderController</div><div class="s">new OrderController(<b class="vi">@2</b>)</div></div>`, map: { os: 'p', oc: 'c' }, field: C.p + ' <span class="dim">— 원본 @1은 볼 방법이 없음</span>',
+    t: '저장소에서 "orderService"를 꺼냄 → @2 → 컨트롤러 생성자에', d: '컨트롤러 입장에서는 꺼낼 수 있는 게 <b>@2뿐</b>이에요. 그래서 필드에 프록시가 들어갑니다. 컨트롤러는 자기가 받은 게 프록시인지 모릅니다.' },
+  { k: 'run', who: '요청 스레드 — 런타임', bench: PROXY(true), map: { os: 'p', oc: 'c' }, field: C.p,
+    t: '런타임: order(1L) → @2가 가로채 트랜잭션 시작 → @1.order() → commit/rollback', d: '기동이 끝난 뒤 요청이 오면 Q1-2에서 답한 흐름이 일어납니다. 프록시가 가로채 <code>TransactionInterceptor</code> → <code>PlatformTransactionManager</code>로 트랜잭션을 열고, 본문은 <b>원본 @1</b>이 실행해요.' },
+];
+const PLAIN = TX.map(s => ({ ...s }));
+PLAIN[6] = { k: '5', who: 'BeanPostProcessor — Auto Proxy Creator', bench: ORIG(), map: { os: 'x', oc: 'x' }, field: '아직 컨트롤러 없음',
+  t: '⑤ 검사: "적용할 Advisor 있나?" → 없음 → @1 그대로 반환', d: '같은 검사대를 지나지만 <code>@Transactional</code>(또는 다른 AOP 대상)이 없으니 <b>받은 @1을 그대로</b> 돌려줍니다. 프록시를 만들지 <b>결정하는 곳</b>이 바로 여기예요.' };
+PLAIN[7] = { k: '6', who: '컨테이너 — 등록', bench: ORIG(), map: { os: 'o', oc: 'x' }, field: '아직 컨트롤러 없음',
+  t: '⑥ 반환받은 @1을 저장소에 등록', d: '규칙은 같습니다. <b>반환받은 것을 등록.</b> 이번엔 그게 원본이에요.' };
+PLAIN[8] = { ...TX[8], bench: `<div class="obj" style="border:2px solid var(--ok);background:#11201a"><div class="tag ok">OrderController</div><div class="s">new OrderController(<b class="bl">@1</b>)</div></div>`, map: { os: 'o', oc: 'c' }, field: C.o,
+  t: '저장소에서 꺼냄 → @1 → 컨트롤러 생성자에', d: '이번엔 원본이 그대로 주입됩니다.' };
+PLAIN[9] = { k: 'run', who: '요청 스레드 — 런타임', bench: ORIG('order() 바로 실행'), map: { os: 'o', oc: 'c' }, field: C.o,
+  t: '런타임: order(1L) → @1이 바로 실행. 가로챌 프록시가 없으니 트랜잭션도 없음', d: '①~④와 ⑥은 두 경우가 <b>완전히 같고</b>, 차이는 <b>⑤의 반환값 하나</b>뿐입니다.' };
+
+const MODES = { TX, PLAIN };
+let mode = 'TX', i = 0;
+function render() {
+  const all = MODES[mode], s = all[i], prev = i ? all[i - 1] : null;
+  const order = STAGES.filter(x => x.k).map(x => x.k), ci = order.indexOf(s.k);
+  $('line').innerHTML = STAGES.map(x => x.g ? `<div class="stg grp">${x.g}</div>` :
+    `<div class="stg ${x.k === s.k ? 'cur' : order.indexOf(x.k) < ci ? 'done' : ''} ${x.star ? 'star' : ''}"><span class="n">${x.n}</span><span>${x.t}<div class="d">${x.d}</div></span></div>`).join('');
+  $('who').innerHTML = `▶ 지금 일하는 것: <b>${s.who}</b>`;
+  $('bench').innerHTML = s.bench;
+  $('bench').className = 'bench ' + (prev && prev.bench !== s.bench ? 'chg' : '');
+  $('map').innerHTML = `<div class="r"><span>"orderService"</span>${C[s.map.os]}</div><div class="r"><span>"orderController"</span>${C[s.map.oc]}</div>`;
+  $('mapBox').className = 'box map ' + (prev && JSON.stringify(prev.map) !== JSON.stringify(s.map) ? 'chg' : '');
+  $('field').innerHTML = s.field.startsWith('<') ? s.field : `<span class="dim">${s.field}</span>`;
+  $('ctrlBox').className = 'box ' + (prev && prev.field !== s.field ? 'chg' : '');
+  $('narr').innerHTML = `<div class="step">STEP ${i + 1} / ${all.length}</div><div class="title">${s.t}</div><div>${s.d}</div>`;
+  $('prev').disabled = i === 0; $('next').disabled = i === all.length - 1;
+  $('dots').innerHTML = all.map((_, k) => `<div class="dot ${k === i ? 'on' : ''}" data-k="${k}">${k + 1}</div>`).join('');
+  document.querySelectorAll('.dot').forEach(d => d.onclick = () => { i = +d.dataset.k; render(); });
+}
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m;
+  document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); render();
+});
+$('next').onclick = () => { i++; render(); };
+$('prev').onclick = () => { i--; render(); };
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' && i < MODES[mode].length - 1) { i++; render(); }
+  if (e.key === 'ArrowLeft' && i > 0) { i--; render(); }
+});
+render();
+</script>
+</body>
+</html>
