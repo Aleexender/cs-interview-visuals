@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@PostConstruct는 왜 프록시를 안 거치나 — 3D로 호출 따라가기</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13px; overflow-x: auto; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .vi { color: var(--violet); } .bl { color: var(--blue); }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 12px 16px; border-radius: 6px; font-size: 16px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  button { font: inherit; padding: 9px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  button.on { border-color: var(--mid); background: #2a2416; }
+
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cap { border: 2px solid var(--blue); border-radius: 14px; background: #131d2a; padding: 12px 18px; margin-bottom: 12px; min-height: 104px; }
+  .cap .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .cap .title { font-size: 20px; font-weight: 800; margin: 2px 0 4px; }
+  .cap.bad { border-color: var(--no); background: #2c1a1e; } .cap.bad .step { color: var(--no); }
+  .cap.gate { border-color: var(--violet); background: #1d1730; } .cap.gate .step { color: var(--violet); }
+  .cap.good { border-color: var(--ok); background: #16291f; } .cap.good .step { color: var(--ok); }
+  .viewport { position: relative; border: 2px solid var(--line); border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #18222e, #0b0f14 75%); }
+  canvas { display: block; width: 100%; height: 500px; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .hint { position: absolute; right: 12px; top: 10px; font-size: 12.5px; color: var(--dim); background: rgba(15,20,25,.7); padding: 3px 10px; border-radius: 99px; pointer-events: none; }
+
+  .tl { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 12px; position: relative; }
+  .tl .c { text-align: center; font-size: 12.5px; padding: 8px 4px; border-radius: 8px; background: #141a21; border: 2px solid var(--line); color: var(--dim); transition: all .35s; }
+  .tl .c b { display: block; font-size: 14px; color: var(--text); }
+  .tl .c.now { border-color: var(--mid); background: #2a2416; color: var(--text); transform: translateY(-3px); box-shadow: 0 6px 18px rgba(245,184,74,.25); }
+  .tl .c.px { border-style: dashed; border-color: #5a4a80; }
+  .tl-t { font-size: 13px; color: var(--dim); margin-top: 14px; font-weight: 700; }
+
+  .ctrl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .ctrl label { font-size: 13px; color: var(--dim); display: flex; align-items: center; gap: 6px; margin-left: 6px; }
+  .script { display: grid; gap: 4px; margin-top: 12px; }
+  .script .s { display: grid; grid-template-columns: 28px 1fr; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer; border: 1px solid transparent; }
+  .script .s .n { width: 24px; height: 24px; border-radius: 50%; background: #252d38; text-align: center; line-height: 24px; font-size: 12px; font-weight: 700; }
+  .script .s.done { opacity: .5; }
+  .script .s.cur { background: #1b2a40; border-color: var(--blue); }
+  .script .s.cur .n { background: var(--blue); color: #0f1419; }
+  .script .s:hover { background: #1a2433; }
+  @media (max-width: 900px) { canvas { height: 380px; } .tl { grid-template-columns: repeat(4, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>@PostConstruct는 왜 프록시를 안 거치나 — 3D로 호출 따라가기</h1>
+  <div class="sub">2026-10-26 모의면접 Q1-8 · 공(●)이 "호출"입니다. 공이 보라색 껍데기(프록시 @2)의 <b>입구(게이트)</b>를 지나면 트랜잭션이 걸리고, 안 지나면 안 걸립니다.</div>
+
+  <section>
+    <div class="key">
+      <b>@Transactional은 메서드에 붙는 기능이 아니라, <span class="vi">프록시 @2의 게이트를 통과한 호출</span>에만 걸리는 기능이다.</b><br>
+      <span style="font-size:14.5px">그래서 늘 "<b>이 호출은 누가, 어떤 참조(@1 / @2)로 하나?</b>"를 본다. 아래 3가지 장면에서 공이 게이트를 지나는지 보세요.</span>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">1</span>3D 장면 — 호출(●)이 어디로 들어가나</h2>
+    <div class="modes">
+      <button data-m="A" class="on">① 평소 요청 — 프록시 거침 ✅</button>
+      <button data-m="B">② @PostConstruct — 프록시가 아직 없음 ❌</button>
+      <button data-m="C">③ self-invocation — 프록시 우회 ❌</button>
+    </div>
+    <div class="cap" id="cap"></div>
+    <div class="viewport">
+      <canvas id="cv"></canvas>
+      <div class="hint">🖱 드래그해서 돌려 보기 · 더블클릭 = 원위치</div>
+    </div>
+    <div class="tl-t">⏱ 지금 시점 — 빈 생성 단계 (오늘 배운 순서)</div>
+    <div class="tl" id="tl"></div>
+    <div class="ctrl">
+      <button id="prev">◀ 이전 장면</button>
+      <button id="play" class="primary">⏸ 일시정지</button>
+      <button id="next">다음 장면 ▶</button>
+      <button id="replay">↺ 처음부터</button>
+      <label>속도 <input id="speed" type="range" min="0.4" max="2" step="0.1" value="1"></label>
+    </div>
+    <div class="script" id="script"></div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span>세 장면 비교</h2>
+    <table>
+      <tr><th></th><th class="ok">① 평소 요청</th><th class="no">② @PostConstruct</th><th class="no">③ self-invocation</th></tr>
+      <tr><td>누가 호출하나</td><td>내 코드 (컨트롤러)</td><td><b>컨테이너</b> (CommonAnnotationBeanPostProcessor)</td><td>내 코드 (<code>this.use()</code>)</td></tr>
+      <tr><td>어떤 참조로 호출하나</td><td><span class="vi">@2</span> (주입받은 필드)</td><td><span class="bl">@1</span> (<code>m.invoke(bean)</code>의 bean)</td><td><span class="bl">@1</span> (<code>this</code>)</td></tr>
+      <tr><td>그 순간 프록시 @2는?</td><td>있음</td><td><b>아직 없음</b> — ⑤에서 생김</td><td>있음 — 하지만 <b>바깥에</b> 있음</td></tr>
+      <tr><td>게이트 통과</td><td class="ok">✅ 통과 → 트랜잭션</td><td class="no">❌ 게이트 자체가 없음</td><td class="no">❌ 안쪽에서 호출해 우회</td></tr>
+      <tr><td>Q1-8 코드의 결과</td><td>—</td><td class="no"><code>findAll()</code> 뒤 영속성 컨텍스트 닫힘 → <code>category.name</code>에서 <code>LazyInitializationException</code> → 기동 실패</td><td>—</td></tr>
+    </table>
+<pre style="margin-top:14px"><code><span class="dim">// @PostConstruct를 부르는 스프링 코드 (단순화) — CommonAnnotationBeanPostProcessor</span>
+Object postProcessBeforeInitialization(Object bean) {   <span class="dim">// bean = @1 (원본). @2는 아직 세상에 없음</span>
+    for (Method m : @PostConstruct 메서드들) m.invoke(bean);   <span class="dim">// → @1.warmUp() 직접 호출</span>
+    return bean;
+}</code></pre>
+    <div class="say">면접용: <b>"@PostConstruct는 BeanPostProcessor의 초기화 전 단계에서 컨테이너가 원본 객체에 직접 호출하고, 트랜잭션 프록시는 그 뒤 postProcessAfterInitialization에서 만들어지기 때문에 @Transactional이 적용되지 않습니다. 기동 시 트랜잭션이 필요한 작업은 ApplicationReadyEvent 리스너나 TransactionTemplate으로 합니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html">Spring Reference — Lifecycle Callbacks (@PostConstruct)</a> ·
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/beans/factory-extension.html">Container Extension Points (BeanPostProcessor · AOP proxy-wrapping)</a> ·
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html">Using @Transactional (proxy mode · self-invocation)</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const MOTION = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ───────── 3D 장면 정의 (x: 오른쪽, y: 안쪽, z: 위) ─────────
+const P = {
+  caller: [-7, 0, 0.9], callerOut: [-5.3, 0, 0.9],
+  gate: [2.5, 0, 0.9], p1: [5, 0, 0.9],
+  repoIn: [10.6, 0, 0.9], cat: [5, -4.6, 0.8],
+  loopA: [6.1, -1.7, 1.7], loopB: [3.9, -1.7, 1.7],
+};
+const BOX = {
+  caller: { c: [-7, 0, 0.9], s: [3.4, 2.4, 1.8], col: [62, 207, 142] },
+  p1:     { c: [5, 0, 0.9],  s: [2.6, 2.2, 1.8], col: [90, 169, 255] },
+  shell:  { c: [5, 0, 1.5],  s: [5.0, 4.0, 3.0], col: [181, 140, 255] },
+  repo:   { c: [12, 0, 0.9], s: [2.8, 2.2, 1.8], col: [245, 184, 74] },
+  cat:    { c: [5, -4.6, 0.6], s: [2.0, 1.6, 1.2], col: [181, 140, 255] },
+};
+const LABEL = {
+  A: { caller: 'OrderController @3' },
+  B: { caller: '컨테이너 (CommonAnnotationBPP)' },
+  C: { caller: 'OrderController @3' },
+};
+const TL = [
+  ['①', '생성자', '@1 생성'], ['②', '의존성 주입', ''], ['③', 'BPP before', '@PostConstruct'],
+  ['④', 'init 메서드', ''], ['⑤', 'BPP after', '프록시 @2 생성'], ['⑥', '저장소 등록', ''], ['⑦', '기동 완료', '요청 처리'],
+];
+
+// 장면: path(이동) 또는 at(정지). gate: 1=시작(보라) 2=커밋(초록). shell: 프록시 불투명도(0=없음). tl: 타임라인 위치
+const SC = {
+  A: [
+    { at: 'callerOut', dur: 1700, tl: 6, t: '요청 도착 — 컨트롤러가 필드 orderService로 order(1L) 호출', d: '컨트롤러가 들고 있는 참조는 <b class="vi">@2(프록시)</b>. 그래서 호출(●)은 보라색 껍데기의 <b>입구(게이트)</b>로 향합니다.' },
+    { path: ['callerOut', 'gate'], dur: 1500, tl: 6, t: '호출이 @2의 게이트로 들어간다', d: '' },
+    { at: 'gate', gate: 1, dur: 1900, tl: 6, k: 'gate', t: '게이트: TransactionInterceptor → 트랜잭션 시작', d: '@Transactional을 읽고 트랜잭션 매니저로 커넥션을 꺼내 트랜잭션을 엽니다. <b>이 게이트가 프록시가 하는 일의 전부</b>예요.' },
+    { path: ['gate', 'p1'], dur: 1000, tl: 6, t: 'target인 원본 @1의 order()로 위임', d: '' },
+    { at: 'p1', dur: 1500, tl: 6, t: '원본 @1이 본문 실행 — 트랜잭션 안에서', d: '비즈니스 로직은 언제나 원본 @1이 실행합니다.' },
+    { path: ['p1', 'gate'], dur: 900, tl: 6, t: '리턴 — 다시 게이트로', d: '' },
+    { at: 'gate', gate: 2, dur: 1600, tl: 6, k: 'good', t: '게이트: 커밋 (예외였다면 롤백)', d: '' },
+    { path: ['gate', 'callerOut'], dur: 1200, tl: 6, k: 'good', t: '✅ 컨트롤러로 결과 반환', d: '공이 게이트를 <b>들어갈 때 한 번, 나올 때 한 번</b> 지났습니다. 그래서 트랜잭션이 걸렸어요.' },
+  ],
+  B: [
+    { at: 'callerOut', shell: 0, dur: 2600, tl: 2, t: '기동 중 · 빈 생성 ③단계 — 프록시는 아직 없다', d: '컨테이너가 원본 <b class="bl">@1</b>을 만들고 주입까지 끝냈습니다. BeanPostProcessor가 <code>@PostConstruct warmUp()</code>을 찾았어요. 오른쪽 <b>점선</b>은 프록시 @2가 <b>나중에 생길 자리</b>일 뿐, 지금은 비어 있습니다.' },
+    { path: ['callerOut', 'p1'], shell: 0, dur: 2000, tl: 2, k: 'bad', t: 'm.invoke(@1) — 원본에 직접 호출', d: '컨테이너가 들고 있는 건 <b class="bl">@1</b>뿐. <b>게이트가 존재하지 않으니</b> 공이 그대로 원본에 꽂힙니다. @Transactional을 읽어 줄 주체가 없어요.' },
+    { at: 'p1', shell: 0, dur: 1400, tl: 2, k: 'bad', t: 'warmUp() 실행 — 트랜잭션 없음', d: '' },
+    { path: ['p1', 'repoIn'], shell: 0, repo: 1, dur: 1200, tl: 2, t: 'productRepository.findAll()', d: '레포지토리(SimpleJpaRepository)는 <b>자기 @Transactional</b>로 짧은 트랜잭션을 엽니다. 영속성 컨텍스트도 그 안에서만 살아 있어요.' },
+    { at: 'repoIn', shell: 0, repo: 1, dur: 1500, tl: 2, t: 'SELECT product … → 끝나는 순간 트랜잭션 · 영속성 컨텍스트 종료', d: '' },
+    { path: ['repoIn', 'p1'], shell: 0, dur: 1100, tl: 2, t: 'Product 목록 반환 — 이제 준영속', d: '각 Product의 category는 id만 가진 <b class="vi">Category 프록시</b>입니다.' },
+    { path: ['p1', 'cat'], shell: 0, dur: 1100, tl: 2, t: 'it.category.name', d: 'Category 프록시가 SELECT를 보내려는데, 붙어 있을 Session(영속성 컨텍스트)이 없습니다.' },
+    { at: 'cat', shell: 0, boom: 1, dur: 2400, tl: 2, k: 'bad', t: '💥 LazyInitializationException: no Session → 기동 실패', d: '@PostConstruct에서 터진 예외는 빈 생성 실패(BeanCreationException)로 이어져 애플리케이션이 뜨지 않습니다.' },
+    { at: 'cat', shell: [0, 1], hide: 1, dur: 3200, tl: [2, 4], k: 'gate', t: '(타임라인) 프록시 @2는 ⑤에서야 생긴다 — 이미 늦었다', d: '예외가 없었더라도, 트랜잭션을 걸어 줄 껍데기 @2는 <b>warmUp()이 끝난 뒤</b> ⑤ 단계에서 원본을 감쌉니다. 타임라인 마커가 ③ → ⑤로 이동하는 걸 보세요.' },
+  ],
+  C: [
+    { at: 'callerOut', dur: 1500, tl: 6, t: '컨트롤러가 order() 호출', d: '여기까지는 ①과 같습니다.' },
+    { path: ['callerOut', 'gate'], dur: 1300, tl: 6, t: '@2의 게이트로', d: '' },
+    { at: 'gate', gate: 1, dur: 1400, tl: 6, k: 'gate', t: '게이트: order()의 트랜잭션 시작', d: '' },
+    { path: ['gate', 'p1'], dur: 900, tl: 6, t: '원본 @1.order() 실행', d: '' },
+    { path: ['p1', 'loopA', 'loopB', 'p1'], dur: 2600, tl: 6, k: 'bad', loop: 1, t: 'this.use() — 껍데기 안쪽에서 자기 자신 호출', d: '<code>this</code> = <b class="bl">@1</b>. 공이 껍데기 <b>안에서</b> 돌아 다시 원본으로 들어갑니다. 게이트를 지나지 않으니 use()의 <code>@Transactional(REQUIRES_NEW)</code>은 읽히지 않아요.' },
+    { at: 'p1', dur: 1500, tl: 6, k: 'bad', t: 'use()는 order()의 트랜잭션 안에서 그냥 실행됨', d: '②와 원인은 같습니다 — <b>@1에 직접 호출</b>. 차이는 호출하는 주체(컨테이너 vs 내 코드)와 프록시가 존재하는지 뿐.' },
+    { path: ['p1', 'gate'], dur: 900, tl: 6, t: '리턴', d: '' },
+    { at: 'gate', gate: 2, dur: 1300, tl: 6, k: 'good', t: 'order()의 트랜잭션 커밋', d: '' },
+    { path: ['gate', 'callerOut'], dur: 1100, tl: 6, t: '반환', d: '' },
+  ],
+};
+
+// ───────── 상태 ─────────
+let mode = 'A', seg = 0, segT = 0, playing = MOTION, speed = 1, last = 0, hold = 0;
+let yaw = -0.55, pitch = 0.62, W = 0, H = 0, dpr = 1;
+const trail = [];
+
+// ───────── 3D 수학 ─────────
+function proj([x, y, z]) {
+  x -= 2.5;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const x1 = x * cy - y * sy, y1 = x * sy + y * cy;
+  const y2 = y1 * cp - z * sp, z2 = y1 * sp + z * cp;
+  const D = 38, f = Math.min(W * 1.5, H * 3.4), k = f / (D + y2);
+  return { x: W / 2 + x1 * k, y: H * 0.6 - z2 * k, d: y2, k };
+}
+const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+function boxFaces(b) {
+  const [cx, cy, cz] = b.c, [sx, sy, sz] = b.s.map(v => v / 2);
+  const v = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(([a, c, e]) => [cx + a * sx, cy + c * sy, cz + e * sz]);
+  return [[0,1,2,3,.45],[4,5,6,7,1],[0,1,5,4,.8],[3,2,6,7,.6],[0,3,7,4,.68],[1,2,6,5,.72]].map(f => ({ pts: f.slice(0, 4).map(i => v[i]), shade: f[4] }));
+}
+const rgba = (c, a, s = 1) => `rgba(${c.map(v => Math.round(v * s)).join(',')},${a})`;
+
+// ───────── 그리기 ─────────
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function poly(pts) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); }
+function label(pos3, text, color, sub) {
+  const p = proj(pos3);
+  ctx.font = '700 13px -apple-system, "Apple SD Gothic Neo", sans-serif';
+  const w = Math.max(ctx.measureText(text).width, sub ? ctx.measureText(sub).width * 0.9 : 0) + 18;
+  const h = sub ? 38 : 22;
+  ctx.fillStyle = 'rgba(13,17,22,.86)'; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(p.x - w / 2, p.y - h, w, h, 8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.fillText(text, p.x, p.y - h + 15);
+  if (sub) { ctx.font = '500 11.5px -apple-system, sans-serif'; ctx.fillStyle = '#b8c1cc'; ctx.fillText(sub, p.x, p.y - 7); }
+}
+function draw(now) {
+  const list = SC[mode], s = list[seg], t = Math.min(segT / s.dur, 1);
+  const shellA = Array.isArray(s.shell) ? s.shell[0] + (s.shell[1] - s.shell[0]) * ease(t) : (s.shell ?? 1);
+  ctx.clearRect(0, 0, W, H);
+  let shake = 0;
+  if (s.boom) shake = Math.max(0, 1 - t * 2.2) * 7;
+  ctx.save(); if (shake) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
+
+  // 바닥 격자
+  ctx.lineWidth = 1;
+  for (let x = -10; x <= 15; x += 1.5) { const a = proj([x, -7, 0]), b = proj([x, 7, 0]); ctx.strokeStyle = 'rgba(80,100,120,.18)'; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  for (let y = -7; y <= 7; y += 1.5) { const a = proj([-10, y, 0]), b = proj([15, y, 0]); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+
+  // 상자 면 모으기 (멀리 있는 것부터)
+  const faces = [];
+  const add = (key, alpha, opt = {}) => boxFaces(BOX[key]).forEach(f => faces.push({ ...f, key, alpha, opt, d: f.pts.reduce((a, p) => a + proj(p).d, 0) / 4 }));
+  add('caller', .92);
+  add('p1', .95);
+  if (mode === 'B') { add('repo', s.repo ? .95 : .55, { glow: s.repo }); add('cat', .7); }
+  if (shellA > 0.01) add('shell', .16 * shellA, { line: .9 * shellA });
+  faces.sort((a, b) => b.d - a.d);
+  for (const f of faces) {
+    const b = BOX[f.key], pts = f.pts.map(proj);
+    poly(pts);
+    ctx.fillStyle = rgba(b.col, f.alpha, f.shade * (f.opt.glow ? 1.15 : .75)); ctx.fill();
+    ctx.strokeStyle = rgba(b.col, f.opt.line ?? .95); ctx.lineWidth = f.key === 'shell' ? 1.8 : 1.3;
+    if (f.key === 'cat') ctx.setLineDash([5, 4]);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // 프록시가 아직 없을 때: 생길 자리 점선 윤곽
+  if (mode === 'B' && shellA < 0.99) {
+    ctx.setLineDash([6, 6]); ctx.lineWidth = 1.4; ctx.strokeStyle = `rgba(181,140,255,${.45 * (1 - shellA)})`;
+    boxFaces(BOX.shell).forEach(f => { poly(f.pts.map(proj)); ctx.stroke(); });
+    ctx.setLineDash([]);
+  }
+  // 게이트 (프록시 왼쪽 면의 입구)
+  if (shellA > 0.01) {
+    const g = s.gate && s.at === 'gate' ? 1 : 0, pulse = g ? .55 + .45 * Math.sin(now / 140) : 0;
+    const gc = s.gate === 2 ? [62, 207, 142] : [181, 140, 255];
+    const q = [[2.5, -0.9, 0.05], [2.5, 0.9, 0.05], [2.5, 0.9, 1.85], [2.5, -0.9, 1.85]].map(proj);
+    poly(q); ctx.fillStyle = rgba(gc, (.25 + .5 * pulse) * shellA); ctx.fill();
+    ctx.strokeStyle = rgba(gc, shellA); ctx.lineWidth = 2.5; ctx.stroke();
+    if (g) { const c = proj(P.gate); const r = 60 * c.k / 40; const gr = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r * 3); gr.addColorStop(0, rgba(gc, .55 * pulse)); gr.addColorStop(1, rgba(gc, 0)); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(c.x, c.y, r * 3, 0, 7); ctx.fill(); }
+  }
+
+  // 폭발
+  if (s.boom) {
+    const c = proj(P.cat), r = (30 + 90 * ease(Math.min(t * 1.6, 1))) * c.k / 40;
+    const gr = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+    gr.addColorStop(0, 'rgba(255,240,200,.9)'); gr.addColorStop(.35, 'rgba(242,102,122,.7)'); gr.addColorStop(1, 'rgba(242,102,122,0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 7); ctx.fill();
+    ctx.font = '800 15px -apple-system, sans-serif'; ctx.fillStyle = '#ffd0d6'; ctx.textAlign = 'center';
+    ctx.fillText('LazyInitializationException', c.x, c.y + r * .55 + 18);
+  }
+
+  // 이름표
+  label([-7, 0, 2.3], LABEL[mode].caller, '#3ecf8e', mode === 'B' ? '들고 있는 참조: @1' : '필드 orderService = @2');
+  label([5, 0, 2.15], '원본 @1 · OrderService', '#5aa9ff', mode === 'B' ? 'warmUp()' : mode === 'C' ? 'order() → this.use()' : 'order()');
+  if (shellA > 0.05) label([5, 0, 3.5], '프록시 @2 (껍데기)', `rgba(181,140,255,${Math.max(shellA, .3)})`, '보라 문 = 게이트(TransactionInterceptor)');
+  else if (mode === 'B') label([5, 0, 3.5], '프록시 @2 — 아직 없음', 'rgba(181,140,255,.7)', '⑤ BPP after에서 생김');
+  if (mode === 'B') {
+    label([12, 0, 2.3], 'productRepository', '#f5b84a', '자기 트랜잭션 → 끝나면 닫힘');
+    label([5, -4.6, 1.75], 'Category 프록시 (LAZY)', '#b58cff', 'id만 있음');
+  }
+  // 호출 공 + 꼬리
+  let pos = s.at ? P[s.at] : null;
+  if (s.path) {
+    const pts = s.path.map(k => P[k]), n = pts.length - 1, e = ease(t) * n, i = Math.min(Math.floor(e), n - 1);
+    pos = lerp(pts[i], pts[i + 1], e - i);
+  }
+  if (!s.hide) {
+    trail.push(pos); if (trail.length > 22) trail.shift();
+    const col = s.k === 'bad' ? [242, 102, 122] : s.k === 'good' ? [62, 207, 142] : [245, 184, 74];
+    trail.forEach((q, i) => { const c = proj(q); ctx.fillStyle = rgba(col, (i / trail.length) * .35); ctx.beginPath(); ctx.arc(c.x, c.y, 9 * c.k / 40 * (i / trail.length), 0, 7); ctx.fill(); });
+    const c = proj(pos), r = 15 * c.k / 40;
+    const gr = ctx.createRadialGradient(c.x - r / 3, c.y - r / 3, r / 6, c.x, c.y, r);
+    gr.addColorStop(0, '#fff'); gr.addColorStop(.35, rgba(col, 1)); gr.addColorStop(1, rgba(col, 1, .55));
+    ctx.shadowColor = rgba(col, .9); ctx.shadowBlur = 22; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    // 바닥 그림자
+    const sh = proj([pos[0], pos[1], 0]); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(sh.x, sh.y, r, r * .4, 0, 0, 7); ctx.fill();
+  } else trail.length = 0;
+
+  ctx.restore();
+}
+
+// ───────── 진행 · UI ─────────
+function renderUI() {
+  const list = SC[mode], s = list[seg], t = Math.min(segT / s.dur, 1);
+  $('cap').className = 'cap ' + (s.k || '');
+  $('cap').innerHTML = `<div class="step">장면 ${seg + 1} / ${list.length}</div><div class="title">${s.t}</div><div>${s.d || ''}</div>`;
+  const tl = Array.isArray(s.tl) ? (t < .5 ? s.tl[0] : s.tl[1]) : s.tl;
+  $('tl').innerHTML = TL.map(([n, a, b], i) => `<div class="c ${i === tl ? 'now' : ''} ${i === 4 ? 'px' : ''}"><b>${n} ${a}</b>${b}</div>`).join('');
+  $('script').innerHTML = list.map((x, i) => `<div class="s ${i === seg ? 'cur' : i < seg ? 'done' : ''}" data-i="${i}"><span class="n">${i + 1}</span><span>${x.t}</span></div>`).join('');
+  document.querySelectorAll('.script .s').forEach(el => el.onclick = () => jump(+el.dataset.i));
+}
+let uiKey = '';
+function tick(now) {
+  const dt = last ? Math.min(now - last, 60) : 0; last = now;
+  const list = SC[mode];
+  if (playing) {
+    segT += dt * speed;
+    if (segT >= list[seg].dur) {
+      if (seg < list.length - 1) { seg++; segT = 0; }
+      else { hold += dt; segT = list[seg].dur; if (hold > 1800) { seg = 0; segT = 0; hold = 0; trail.length = 0; } }
+    }
+  }
+  const s = list[seg], tlHalf = Array.isArray(s.tl) && segT / s.dur >= .5;
+  const key = mode + seg + tlHalf;
+  if (key !== uiKey) { uiKey = key; renderUI(); }
+  draw(now);
+  requestAnimationFrame(tick);
+}
+function jump(i) { seg = Math.max(0, Math.min(i, SC[mode].length - 1)); segT = 0; hold = 0; trail.length = 0; uiKey = mode + seg + false; renderUI(); }
+function setPlaying(p) { playing = p; $('play').textContent = p ? '⏸ 일시정지' : '▶ 재생'; }
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b));
+  jump(0); setPlaying(true);
+});
+$('prev').onclick = () => jump(seg - 1);
+$('next').onclick = () => jump(seg + 1);
+$('replay').onclick = () => { jump(0); setPlaying(true); };
+$('play').onclick = () => setPlaying(!playing);
+$('speed').oninput = e => speed = +e.target.value;
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') jump(seg + 1);
+  if (e.key === 'ArrowLeft') jump(seg - 1);
+  if (e.key === ' ') { e.preventDefault(); setPlaying(!playing); }
+});
+// 드래그 회전
+let drag = null;
+cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw, pitch }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointermove', e => { if (!drag) return; yaw = drag.yaw + (e.clientX - drag.x) * 0.006; pitch = Math.max(0.15, Math.min(1.25, drag.pitch + (e.clientY - drag.y) * 0.005)); });
+cv.addEventListener('pointerup', () => drag = null);
+cv.addEventListener('dblclick', () => { yaw = -0.55; pitch = 0.62; });
+addEventListener('resize', resize);
+
+const h = location.hash.slice(1).match(/^([ABC])(\d+)?$/);
+if (h) { mode = h[1]; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x.dataset.m === mode)); if (h[2]) { jump(+h[2] - 1); segT = SC[mode][seg].dur * 0.6; setPlaying(false); } }
+setPlaying(playing);
+resize();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
