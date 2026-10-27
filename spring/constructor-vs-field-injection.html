@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생성자 주입 vs 필드 주입 — 3D로 "언제 넣느냐" 보기</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { margin: 0; background: #141a21; padding: 12px 14px; border-radius: 10px; font-size: 13px; overflow-x: auto; line-height: 1.6; }
+  pre code { background: none; padding: 0; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .vi { color: var(--violet); } .bl { color: var(--blue); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; font-size: 14px; }
+  .card.no { border-color: var(--no); } .card.ok { border-color: var(--ok); }
+  .card .t { font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .key { border-left: 4px solid var(--mid); background: #2a2416; padding: 12px 16px; border-radius: 6px; font-size: 16px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  button { font: inherit; padding: 9px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  .modes button.on { border-color: var(--mid); background: #2a2416; }
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cap { border: 2px solid var(--blue); border-radius: 14px; background: #131d2a; padding: 12px 18px; margin-bottom: 12px; min-height: 112px; }
+  .cap .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .cap .title { font-size: 20px; font-weight: 800; margin: 2px 0 4px; }
+  .cap.bad { border-color: var(--no); background: #2c1a1e; } .cap.bad .step { color: var(--no); }
+  .cap.good { border-color: var(--ok); background: #16291f; } .cap.good .step { color: var(--ok); }
+  .viewport { position: relative; border: 2px solid var(--line); border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #18222e, #0b0f14 75%); }
+  canvas { display: block; width: 100%; height: 520px; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .hint { position: absolute; right: 12px; top: 10px; font-size: 12.5px; color: var(--dim); background: rgba(15,20,25,.7); padding: 3px 10px; border-radius: 99px; pointer-events: none; }
+  .legend { position: absolute; left: 12px; top: 10px; font-size: 12.5px; color: var(--dim); background: rgba(15,20,25,.75); padding: 6px 10px; border-radius: 10px; pointer-events: none; line-height: 1.7; }
+  .sq { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  .ctrl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .ctrl label { font-size: 13px; color: var(--dim); display: flex; align-items: center; gap: 6px; margin-left: 6px; }
+  .script { display: grid; gap: 4px; margin-top: 12px; }
+  .script .s { display: grid; grid-template-columns: 28px 1fr; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer; border: 1px solid transparent; }
+  .script .s .n { width: 24px; height: 24px; border-radius: 50%; background: #252d38; text-align: center; line-height: 24px; font-size: 12px; font-weight: 700; }
+  .script .s.done { opacity: .5; }
+  .script .s.cur { background: #1b2a40; border-color: var(--blue); }
+  .script .s.cur .n { background: var(--blue); color: #0f1419; }
+  .script .s:hover { background: #1a2433; }
+  @media (max-width: 900px) { canvas { height: 400px; } .two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>생성자 주입 vs 필드 주입 — 3D로 "언제 넣느냐" 보기</h1>
+  <div class="sub">2026-10-26 모의면접 Q1-9 · 앞줄(초록 이름표) = 생성자 주입, 뒷줄(주황 이름표) = 필드 주입. 두 줄이 똑같은 조립 라인을 나란히 지나갑니다.</div>
+
+  <section>
+    <h2><span class="num">1</span>질문 · 내 답 · 판정</h2>
+    <div class="two">
+      <div class="card no"><div class="t">내 답변 (원문)</div>"autowired 로 하면 self invocation 문제가 발생할수도 있어서 생성자 주입을 권장함."
+        <div style="margin-top:8px" class="no">❌ 오답 (깊이 0). <b>주입 방식과 self-invocation은 관계가 없다.</b> self-invocation은 <code>this</code>로 호출해 프록시를 <b>우회하는 호출 경로</b> 문제라 어떤 주입 방식에서도 똑같이 생긴다. 오늘 배운 용어를 인과 없이 결론에 붙인 경우.</div></div>
+      <div class="card ok"><div class="t">정답의 뿌리 — 딱 한 가지</div>
+        <b>"의존성을 언제 넣느냐"</b><br>
+        · 생성자 주입: <b>① 생성자 호출 때</b> 들고 태어난다<br>
+        · 필드 주입: ①에서 <b class="no">빈 채로(null)</b> 태어나고 <b>② 필드 주입</b>에서 컨테이너가 리플렉션으로 채워 넣는다<br>
+        → 이 차이 하나에서 <b>final · 불완전 객체 · 테스트 · 순환 참조</b> 네 가지 이유가 전부 나온다.</div>
+    </div>
+<pre style="margin-top:12px"><code><span class="dim">// 생성자 주입 (Kotlin 주 생성자 + val)</span>
+class OrderController(private val orderService: OrderService)
+
+<span class="dim">// 필드 주입</span>
+class OrderController {
+    @Autowired lateinit var orderService: OrderService
+}</code></pre>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span>3D 조립 라인 — 버튼마다 이유 하나씩</h2>
+    <div class="modes">
+      <button data-m="BASE" class="on">0. 기본 흐름 — 언제 넣나</button>
+      <button data-m="FINAL">이유 1. final (바꿔치기)</button>
+      <button data-m="NPE">이유 2. 불완전한 객체 (NPE)</button>
+      <button data-m="TEST">이유 3. 스프링 없이 테스트</button>
+      <button data-m="CYCLE">이유 4. 순환 참조</button>
+    </div>
+    <div class="cap" id="cap"></div>
+    <div class="viewport">
+      <canvas id="cv"></canvas>
+      <div class="legend">
+        <span class="sq" style="background:#3ecf8e"></span>OrderController 객체 &nbsp;
+        <span class="sq" style="background:#b58cff"></span>의존성 (@2 OrderService)<br>
+        <span class="sq" style="background:#f2667a"></span>빈 칸 = null &nbsp;
+        🔒 = final (다시 대입 불가)
+      </div>
+      <div class="hint">🖱 드래그해서 돌려 보기 · 더블클릭 = 원위치</div>
+    </div>
+    <div class="ctrl">
+      <button id="prev">◀ 이전 장면</button>
+      <button id="play" class="primary">⏸ 자동 넘김 끄기</button>
+      <button id="next">다음 장면 ▶</button>
+      <button id="replay">↺ 처음부터</button>
+      <label>속도 <input id="speed" type="range" min="0.4" max="2" step="0.1" value="1"></label>
+    </div>
+    <div class="script" id="script"></div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span>정리</h2>
+    <table>
+      <tr><th>이유</th><th class="ok">생성자 주입</th><th class="mid">필드 주입</th><th>①/② 근거</th></tr>
+      <tr><td><b>1. final (불변)</b></td><td>✅ <code>val</code> / <code>final</code> 가능 → 바꿔치기 시 <b>컴파일 에러</b></td><td>❌ <code>lateinit var</code> → 나중에 누가 바꿔도 조용히 성공</td><td>①에서 한 번 대입 vs ②에서 리플렉션으로 사후 대입</td></tr>
+      <tr><td><b>2. 불완전한 객체</b></td><td>✅ ①이 끝나면 이미 완전</td><td>❌ ①~② 사이 의존성 <code>null</code> → 생성자에서 쓰면 NPE</td><td>②가 ① <b>뒤</b>에 일어나기 때문</td></tr>
+      <tr><td><b>3. 테스트</b></td><td>✅ <code>OrderController(mock)</code>으로 바로 생성</td><td>❌ <code>new</code>로 만들면 ②를 해 줄 컨테이너가 없어 영원히 <code>null</code></td><td>②는 <b>컨테이너만</b> 할 수 있다</td></tr>
+      <tr><td><b>4. 순환 참조</b></td><td>✅ A↔B면 <b>기동 실패</b>로 바로 드러남</td><td>⚠️ ①을 빈 채로 넘기고 ②에서 서로 채워 <b>문제를 숨김</b> (Boot 2.6+는 기본 금지)</td><td>①에 상대가 필요하냐 아니냐</td></tr>
+      <tr><td>5. 의존성 개수</td><td>파라미터가 늘면 바로 보임 (책임 과다 신호)</td><td>필드가 늘어도 티가 잘 안 남</td><td>—</td></tr>
+    </table>
+    <div class="say">면접용: <b>"생성자 주입은 객체가 생성되는 순간 의존성이 모두 채워지기 때문에 필드를 final로 둘 수 있고, 의존성이 null인 불완전한 상태가 존재하지 않습니다. 그래서 스프링 없이 new로 테스트할 수 있고, 순환 참조도 기동 시점에 바로 드러납니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html">Spring Reference — Dependency Injection (Constructor-based or setter-based DI?)</a>
+      (<i>"the Spring team generally advocates constructor injection, as it lets you implement application components as immutable objects and ensures that required dependencies are not null."</i>) ·
+      <a style="color:var(--blue)" href="https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-2.6-Release-Notes">Spring Boot 2.6 Release Notes (circular references prohibited by default)</a></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const MOTION = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const ease = t => t <= 0 ? 0 : t >= 1 ? 1 : t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const seg01 = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+let NOW = 0;
+
+// ───────── 작은 3D 엔진 (캔버스 · 원근 투영 · 화가 알고리즘) ─────────
+function Engine(cv, cfg) {
+  const ctx = cv.getContext('2d');
+  const S = { yaw: cfg.yaw, pitch: cfg.pitch, W: 0, H: 0 };
+  let faces = [], over = [];
+  const rgba = (c, a, s = 1) => `rgba(${c.map(v => Math.round(Math.min(255, v * s))).join(',')},${a})`;
+  function resize() { const d = devicePixelRatio || 1; S.W = cv.clientWidth; S.H = cv.clientHeight; cv.width = S.W * d; cv.height = S.H * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  function proj([x, y, z]) {
+    x -= cfg.center;
+    const cy = Math.cos(S.yaw), sy = Math.sin(S.yaw), cp = Math.cos(S.pitch), sp = Math.sin(S.pitch);
+    const x1 = x * cy - y * sy, y1 = x * sy + y * cy, y2 = y1 * cp - z * sp, z2 = y1 * sp + z * cp;
+    const D = 38, f = Math.min(S.W * 1.5, S.H * 3.3) * cfg.zoom, k = f / (D + y2);
+    return { x: S.W / 2 + x1 * k, y: S.H * cfg.horizon - z2 * k, d: y2, s: D / (D + y2) };
+  }
+  function box(c, s, col, o = {}) {
+    const sc = o.scale ?? 1; if (sc <= 0.01) return;
+    const [cx, cy, cz] = c, [sx, sy, sz] = s.map(v => v * sc / 2);
+    const v = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(([a, b, e]) => [cx + a * sx, cy + b * sy, cz + e * sz]);
+    [[0,1,2,3,.45],[4,5,6,7,1],[0,1,5,4,.8],[3,2,6,7,.6],[0,3,7,4,.68],[1,2,6,5,.72]].forEach(f => {
+      const pts = f.slice(0, 4).map(i => v[i]);
+      faces.push({ pts, shade: f[4], col, o, d: pts.reduce((a, p) => a + proj(p).d, 0) / 4 });
+    });
+  }
+  function poly(pts) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); }
+  function label(pos, text, color, sub, a = 1) {
+    over.push(() => {
+      const p = proj(pos); ctx.globalAlpha = a;
+      ctx.font = '700 13px -apple-system, "Apple SD Gothic Neo", sans-serif';
+      const w1 = ctx.measureText(text).width; ctx.font = '500 11.5px -apple-system, sans-serif';
+      const w = Math.max(w1, sub ? ctx.measureText(sub).width : 0) + 18, h = sub ? 38 : 22;
+      ctx.fillStyle = 'rgba(13,17,22,.88)'; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(p.x - w / 2, p.y - h, w, h, 8); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.font = '700 13px -apple-system, "Apple SD Gothic Neo", sans-serif'; ctx.fillStyle = color; ctx.fillText(text, p.x, p.y - h + 15);
+      if (sub) { ctx.font = '500 11.5px -apple-system, sans-serif'; ctx.fillStyle = '#c3cbd5'; ctx.fillText(sub, p.x, p.y - 7); }
+      ctx.globalAlpha = 1;
+    });
+  }
+  function emoji(pos, ch, size = 24, a = 1) { over.push(() => { const p = proj(pos); ctx.globalAlpha = a; ctx.font = `${size * p.s * 1.1}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, p.x, p.y); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; }); }
+  function ball(pos, col, r = 14) {
+    over.push(() => {
+      const c = proj(pos), R = r * c.s * 1.1, sh = proj([pos[0], pos[1], 0]);
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(sh.x, sh.y, R, R * .4, 0, 0, 7); ctx.fill();
+      const g = ctx.createRadialGradient(c.x - R / 3, c.y - R / 3, R / 6, c.x, c.y, R);
+      g.addColorStop(0, '#fff'); g.addColorStop(.35, rgba(col, 1)); g.addColorStop(1, rgba(col, 1, .55));
+      ctx.shadowColor = rgba(col, .9); ctx.shadowBlur = 20; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    });
+  }
+  function burst(pos, p, text) {
+    over.push(() => {
+      const c = proj(pos), r = (25 + 85 * ease(Math.min(p * 1.6, 1))) * c.s * 1.1;
+      const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+      g.addColorStop(0, 'rgba(255,240,200,.9)'); g.addColorStop(.35, 'rgba(242,102,122,.75)'); g.addColorStop(1, 'rgba(242,102,122,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 7); ctx.fill();
+      if (text) { ctx.font = '800 14px -apple-system, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(13,17,22,.85)'; const w = ctx.measureText(text).width + 16; ctx.fillRect(c.x - w / 2, c.y + r * .45 + 2, w, 22); ctx.fillStyle = '#ffd0d6'; ctx.fillText(text, c.x, c.y + r * .45 + 18); }
+    });
+  }
+  function arc(a, b, col, prog = 1, lift = 2, dashed = false) {
+    over.push(() => {
+      const n = 24, pts = [];
+      for (let i = 0; i <= n * prog; i++) { const t = i / n, p = lerp(a, b, t); p[2] += Math.sin(Math.PI * t) * lift; pts.push(proj(p)); }
+      if (pts.length < 2) return;
+      ctx.strokeStyle = rgba(col, .95); ctx.lineWidth = 3; if (dashed) ctx.setLineDash([7, 6]);
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); ctx.setLineDash([]);
+      const e = pts[pts.length - 1], q = pts[pts.length - 2], ang = Math.atan2(e.y - q.y, e.x - q.x);
+      ctx.fillStyle = rgba(col, 1); ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x - 13 * Math.cos(ang - .45), e.y - 13 * Math.sin(ang - .45)); ctx.lineTo(e.x - 13 * Math.cos(ang + .45), e.y - 13 * Math.sin(ang + .45)); ctx.closePath(); ctx.fill();
+    });
+  }
+  function grid() {
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(80,100,120,.16)';
+    for (let x = -14; x <= 12; x += 1.5) { const a = proj([x, -7.5, 0]), b = proj([x, 7.5, 0]); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+    for (let y = -7.5; y <= 7.5; y += 1.5) { const a = proj([-14, y, 0]), b = proj([12, y, 0]); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  }
+  function frame(fn, shake = 0) {
+    ctx.clearRect(0, 0, S.W, S.H); faces = []; over = [];
+    ctx.save(); if (shake) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
+    grid(); fn();
+    faces.sort((a, b) => b.d - a.d);
+    for (const f of faces) {
+      const a = f.o.alpha ?? .9, la = f.o.lineA ?? 1;
+      poly(f.pts.map(proj)); ctx.fillStyle = rgba(f.col, a, f.shade * (f.o.glow ? 1.2 : .78)); ctx.fill();
+      ctx.strokeStyle = rgba(f.col, .95 * la); ctx.lineWidth = 1.3; if (f.o.dashed) ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    over.forEach(f => f()); ctx.restore();
+  }
+  let drag = null;
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw: S.yaw, pitch: S.pitch }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => { if (!drag) return; S.yaw = drag.yaw + (e.clientX - drag.x) * .006; S.pitch = Math.max(.15, Math.min(1.3, drag.pitch + (e.clientY - drag.y) * .005)); });
+  cv.addEventListener('pointerup', () => drag = null);
+  cv.addEventListener('dblclick', () => { S.yaw = cfg.yaw; S.pitch = cfg.pitch; });
+  addEventListener('resize', resize); resize();
+  return { box, label, emoji, ball, burst, arc, frame, proj };
+}
+
+// ───────── 장면 재료 ─────────
+const E = Engine($('cv'), { yaw: -0.2, pitch: 0.72, center: -1.6, zoom: .8, horizon: 0.56 });
+const C = { ctrl: [62, 207, 142], dep: [181, 140, 255], mock: [170, 178, 190], bad: [242, 102, 122], reg: [245, 184, 74], arm: [150, 160, 172], test: [90, 169, 255], cyc: [90, 169, 255] };
+const LY = { C: -3.4, F: 3.4 }, X1 = -6, X2 = 0, X3 = 6, REG = [-11.2, 0, 0.9], ARM = [0, 3.4, 4.6];
+const TOP = 1.85;   // 소켓 위 의존성 큐브의 z
+
+function stage(o = {}) {
+  [[X1, '① 생성자 호출'], [X2, '② 필드 주입 (리플렉션)'], [X3, '③ 사용']].forEach(([x, t]) => {
+    E.box([x, 0, 0.01], [3.6, 12, 0.02], [90, 169, 255], { alpha: .06, lineA: .25 });
+    E.label([x, -6.6, 0], t, '#8bb8e8');
+  });
+  E.label([-8.9, LY.C, 0.05], '생성자 주입', '#3ecf8e', 'val + 생성자');
+  E.label([-8.9, LY.F, 0.05], '필드 주입', '#f5b84a', '@Autowired lateinit var');
+  if (o.test) {
+    E.box(REG, [2.4, 2.4, 1.8], C.test, { alpha: .85 }); E.label([REG[0], 0, 2.6], '단위 테스트 코드', '#5aa9ff', 'mock을 직접 넘긴다');
+    E.box(ARM, [1.8, 1.6, .6], C.arm, { alpha: .12, dashed: true, lineA: .5 }); E.label([ARM[0], ARM[1], 5.3], '컨테이너 없음', '#8b95a3', '②를 해 줄 주체가 없다', .8);
+  } else {
+    E.box(REG, [2.4, 2.4, 1.8], C.reg, { alpha: .85 }); E.label([REG[0], 0, 2.6], '컨테이너 저장소', '#f5b84a', '@2 OrderService 보유');
+    E.box(ARM, [1.8, 1.6, .6], C.arm, { alpha: .85 }); E.label([ARM[0], ARM[1], 5.3], '컨테이너 (리플렉션)', '#c3cbd5', '② 필드에 대입하는 팔');
+  }
+}
+// OrderController 하나: dep = 소켓에 든 것 (null이면 빨간 빈칸)
+function obj(lane, x, o = {}) {
+  const y = o.y ?? LY[lane], sc = o.scale ?? 1, a = o.alpha ?? 1;
+  if (sc <= .02) return;
+  E.box([x, y, 0.7 * sc], [2.6, 2.2, 1.4], o.col || C.ctrl, { alpha: .9 * a, scale: sc, dashed: o.dashed, lineA: a });
+  if (sc > .95) {
+    if (o.dep) { E.box([x + (o.dx || 0), y, TOP + (o.dz || 0)], [.9, .9, .9], C[o.dep], { alpha: .95 }); if (o.depLabel) E.label([x, y, TOP + .75], o.depLabel, '#d6c2ff'); }
+    else if (!o.noSocket) { const pl = .35 + .45 * Math.abs(Math.sin(NOW / 230)); E.box([x, y, 1.43], [1.05, 1.05, .05], C.bad, { alpha: pl }); }
+    if (o.lock) E.emoji([x + 1.2, y - 1.2, 1.75 + (o.lockShake ? Math.sin(NOW / 30) * .12 : 0)], '🔒', 26);
+  }
+  if (o.name) E.label([x, y, 3.1], o.name, o.nameCol || (lane === 'C' ? '#3ecf8e' : '#f5b84a'), o.sub, a);
+}
+const cube = (pos, col = C.dep, a = .95) => E.box(pos, [.9, .9, .9], col, { alpha: a });
+const regTop = [REG[0], 0, 2.2], armBot = [ARM[0], ARM[1], 4.1];
+
+// ───────── 장면들 ─────────
+const SUBF = 'orderService = @2', SUBN = 'orderService = null';
+const SC = {
+  BASE: [
+    { dur: 3200, t: '① 생성자 호출 — 두 방식 모두 여기서 객체가 태어난다', d: '<b class="ok">앞줄(생성자 주입)</b>: 컨테이너가 저장소의 @2를 <b>생성자 인자로</b> 넘기므로, 객체가 <b>@2를 들고 태어납니다</b>. 🔒 = final.<br><b class="mid">뒷줄(필드 주입)</b>: <code>new OrderController()</code> — 의존성 칸이 <b class="no">빨갛게 빈 채(null)</b>로 태어납니다.',
+      draw: t => { stage(); const sc = ease(seg01(t, 0, .45)), ft = ease(seg01(t, .1, .7)), got = t >= .7;
+        if (!got) cube(lerp(regTop, [X1, LY.C, TOP], ft));
+        obj('C', X1, { scale: sc, dep: got ? 'dep' : null, noSocket: !got, lock: t > .78, name: 'OrderController', sub: got ? SUBF : '생성자 인자로 @2 받는 중' });
+        obj('F', X1, { scale: sc, name: 'OrderController', sub: SUBN }); } },
+    { dur: 2600, k: 'bad', t: '①과 ② 사이 — 필드 주입 객체는 의존성이 null인 채로 존재한다', d: '조립 라인을 따라 이동하는 동안 <b class="mid">뒷줄</b> 객체는 <b class="no">의존성 없는 불완전한 객체</b>입니다. <b class="ok">앞줄</b>은 이미 완전해요.',
+      draw: t => { stage(); const x = X1 + (X2 - X1) * ease(t);
+        obj('C', x, { dep: 'dep', lock: true, name: 'OrderController', sub: SUBF });
+        obj('F', x, { name: 'OrderController', sub: SUBN }); E.emoji([x, LY.F, 4.3 + .15 * Math.sin(NOW / 200)], '⚠️', 30); } },
+    { dur: 3000, t: '② 필드 주입 — 컨테이너가 리플렉션으로 채워 넣는다', d: '<b class="mid">뒷줄</b>: 컨테이너의 팔이 @2를 내려 빈칸에 꽂습니다(<code>field.set(obj, @2)</code>). 객체가 <b>다 만들어진 뒤에</b> 바깥에서 넣는 거라 <code>final</code>일 수 없어요.<br><b class="ok">앞줄</b>: 할 일 없음 — 이미 들고 있음.',
+      draw: t => { stage(); const ft = ease(seg01(t, .15, .7)), got = t >= .7;
+        obj('C', X2, { dep: 'dep', lock: true, name: 'OrderController', sub: '② 할 일 없음 ✓' });
+        if (!got) cube(lerp(armBot, [X2, LY.F, TOP], ft));
+        obj('F', X2, { dep: got ? 'dep' : null, noSocket: !got && t > .15, name: 'OrderController', sub: got ? SUBF + ' (이제야)' : SUBN }); } },
+    { dur: 2400, t: '③ 사용 단계로 — 겉보기엔 둘 다 똑같다', d: '둘 다 @2를 들고 있습니다. 하지만 <b class="ok">앞줄</b>에만 🔒(final)이 있어요.',
+      draw: t => { stage(); const x = X2 + (X3 - X2) * ease(t);
+        obj('C', x, { dep: 'dep', lock: true, name: 'OrderController', sub: SUBF });
+        obj('F', x, { dep: 'dep', name: 'OrderController', sub: SUBF + ' (final 불가)' }); } },
+    { dur: 3000, k: 'good', t: '차이는 딱 하나 — "언제 넣느냐"', d: '<b class="ok">①에서 들고 태어남</b> vs <b class="mid">①에서 빈 채로 태어나 ②에서 채워짐</b>. 위 버튼 <b>이유 1~4</b>는 전부 이 차이에서 나옵니다.',
+      draw: t => { stage();
+        obj('C', X3, { dep: 'dep', lock: true, name: 'OrderController', sub: '태어날 때부터 완전 · final' });
+        obj('F', X3, { dep: 'dep', name: 'OrderController', sub: '①~② 사이 null · final 불가' }); } },
+  ],
+  FINAL: [
+    { dur: 2600, t: '완성된 두 객체 — 다른 코드가 의존성을 바꿔치기하려 한다면?', d: '<code>controller.orderService = 엉뚱한객체</code> 같은 대입이 실수로 들어왔다고 해 봅시다.',
+      draw: t => { stage();
+        obj('C', X3, { dep: 'dep', lock: true, name: 'OrderController', sub: SUBF });
+        obj('F', X3, { dep: 'dep', name: 'OrderController', sub: SUBF }); } },
+    { dur: 2000, t: '대입 시도 — 빨간 "엉뚱한 객체"가 날아온다', d: '',
+      draw: t => { stage(); const p = ease(t);
+        obj('C', X3, { dep: 'dep', lock: true, name: 'OrderController', sub: SUBF });
+        obj('F', X3, { dep: 'dep', name: 'OrderController', sub: SUBF });
+        cube(lerp([X3 + 5, LY.C, 5], [X3 + .3, LY.C, TOP + 1.1], p), C.bad); cube(lerp([X3 + 5, LY.F, 5], [X3 + .3, LY.F, TOP + 1.1], p), C.bad); } },
+    { dur: 3400, k: 'good', t: '앞줄: 🔒에 막혀 튕겨 나감 (컴파일 에러) · 뒷줄: 조용히 교체됨', d: '<b class="ok">val/final</b>은 다시 대입하는 코드 자체가 <b>컴파일되지 않습니다</b> (<code>Val cannot be reassigned</code>). <b class="mid">lateinit var</b>는 아무 경고 없이 바뀌고, 그 뒤로 모든 호출이 엉뚱한 객체로 갑니다.',
+      draw: t => { stage(); const p = ease(seg01(t, 0, .6));
+        obj('C', X3, { dep: 'dep', lock: true, lockShake: t < .35, name: 'OrderController', sub: '대입 불가 — 컴파일 에러 ✋' });
+        cube(lerp([X3 + .3, LY.C, TOP + 1.1], [X3 + 6, LY.C, 6], p), C.bad, 1 - p * .8);
+        const swapped = t > .45;
+        obj('F', X3, { dep: swapped ? 'bad' : 'dep', name: 'OrderController', sub: swapped ? 'orderService = 엉뚱한 객체 😱' : SUBF });
+        if (!swapped) cube(lerp([X3 + .3, LY.F, TOP + 1.1], [X3, LY.F, TOP], seg01(t, 0, .45)), C.bad);
+        else cube(lerp([X3, LY.F, TOP], [X3 - 4, LY.F + 2, 0.45], ease(seg01(t, .45, 1))), C.dep, 1 - seg01(t, .6, 1) * .7); } },
+  ],
+  NPE: [
+    { dur: 3000, t: '생성자 안에서 의존성을 쓰면?', d: '<code>init { orderService.loadCache() }</code> — 생성자(초기화 블록)에서 의존성을 바로 사용하는 코드입니다. 둘 다 ①에서 실행됩니다.',
+      draw: t => { stage(); const sc = ease(seg01(t, 0, .45)), ft = ease(seg01(t, .1, .7)), got = t >= .7;
+        if (!got) cube(lerp(regTop, [X1, LY.C, TOP], ft));
+        obj('C', X1, { scale: sc, dep: got ? 'dep' : null, noSocket: !got, lock: got, name: 'OrderController', sub: got ? SUBF : '생성자 인자로 받는 중' });
+        obj('F', X1, { scale: sc, name: 'OrderController', sub: SUBN }); } },
+    { dur: 2200, t: '① 생성자 본문에서 orderService.loadCache() 호출 (●)', d: '호출(●)이 객체 몸통에서 의존성 칸으로 올라갑니다.',
+      draw: t => { stage(); const p = ease(t);
+        obj('C', X1, { dep: 'dep', lock: true, name: 'OrderController', sub: SUBF });
+        obj('F', X1, { name: 'OrderController', sub: SUBN });
+        E.ball(lerp([X1 + 1.8, LY.C, .7], [X1, LY.C, TOP], p), [245, 184, 74]); E.ball(lerp([X1 + 1.8, LY.F, .7], [X1, LY.F, 1.45], p), [245, 184, 74]); } },
+    { dur: 3200, k: 'bad', t: '앞줄 ✅ 정상 · 뒷줄 💥 NullPointerException', d: '<b class="mid">필드 주입</b>은 ①이 끝날 때까지 칸이 비어 있어서 생성자에서 쓰면 터집니다. 그래서 필드 주입에서는 초기화를 <b>②가 끝난 뒤 실행되는 <code>@PostConstruct</code></b>로 미뤄야 했어요 (Q1-8과 연결).',
+      draw: t => { stage();
+        obj('C', X1, { dep: 'dep', lock: true, name: 'OrderController', sub: SUBF }); E.emoji([X1 + 2.1, LY.C - 1, 1.8 + .1 * Math.sin(NOW / 200)], '✅', 34);
+        obj('F', X1, { name: 'OrderController', sub: SUBN }); E.burst([X1, LY.F, 1.6], t, 'NullPointerException'); }, shake: t => Math.max(0, 1 - t * 3) * 6 },
+  ],
+  TEST: [
+    { dur: 3000, t: '단위 테스트 — 스프링 없이 new로 직접 만든다', d: '테스트에서는 컨테이너를 띄우지 않습니다. 저장소도, ②를 해 주는 팔도 <b>없어요</b>(점선).<br><b class="ok">앞줄</b>: <code>OrderController(mockService)</code> — 테스트가 직접 mock(회색)을 넘깁니다.',
+      draw: t => { stage({ test: true }); const sc = ease(seg01(t, 0, .45)), ft = ease(seg01(t, .1, .7)), got = t >= .7;
+        if (!got) cube(lerp(regTop, [X1, LY.C, TOP], ft), C.mock);
+        obj('C', X1, { scale: sc, dep: got ? 'mock' : null, noSocket: !got, lock: got, name: 'OrderController', sub: got ? 'orderService = mock' : 'mock 받는 중' });
+        obj('F', X1, { scale: sc, name: 'OrderController()', sub: SUBN + ' — 넘길 방법이 없음' }); } },
+    { dur: 2600, k: 'bad', t: '② 단계 — 그런데 뒷줄을 채워 줄 컨테이너가 없다', d: '②(필드 주입)는 <b>컨테이너만</b> 할 수 있는 일입니다. 테스트에는 컨테이너가 없으니 <b class="mid">뒷줄</b>은 <b class="no">영원히 null</b>. (리플렉션으로 억지로 넣거나 스프링 테스트를 띄워야 함)',
+      draw: t => { stage({ test: true }); const x = X1 + (X2 - X1) * ease(seg01(t, 0, .6));
+        obj('C', x, { dep: 'mock', lock: true, name: 'OrderController', sub: 'orderService = mock' });
+        obj('F', x, { name: 'OrderController()', sub: SUBN }); if (t > .6) E.emoji([X2, LY.F, 4.3], '❓', 30); } },
+    { dur: 3000, k: 'bad', t: '테스트 실행 — 앞줄 ✅ · 뒷줄 💥 NPE', d: '',
+      draw: t => { stage({ test: true }); const p = ease(seg01(t, 0, .45));
+        obj('C', X2, { dep: 'mock', lock: true, name: 'OrderController', sub: 'orderService = mock' });
+        obj('F', X2, { name: 'OrderController()', sub: SUBN });
+        if (t < .45) { E.ball(lerp([X2 + 2, LY.C, .7], [X2, LY.C, TOP], p), [245, 184, 74]); E.ball(lerp([X2 + 2, LY.F, .7], [X2, LY.F, 1.45], p), [245, 184, 74]); }
+        else { E.emoji([X2 + 2.1, LY.C - 1, 1.8], '✅', 34); E.burst([X2, LY.F, 1.6], (t - .45) / .55, 'NullPointerException'); } }, shake: t => t > .45 ? Math.max(0, 1 - (t - .45) * 4) * 6 : 0 },
+  ],
+  CYCLE: [
+    { dur: 3000, t: 'A와 B가 서로를 필요로 한다 (A → B, B → A)', d: '<b class="ok">앞줄(생성자 주입)</b>: A의 ①(생성자)을 부르려면 <b>완성된 B</b>가 필요합니다 → B를 만들러 감.<br><b class="mid">뒷줄(필드 주입)</b>: A, B 모두 일단 빈 칸(null)으로 ①을 끝냅니다.',
+      draw: t => { stage(); const sc = ease(seg01(t, 0, .4));
+        obj('C', -3, { scale: .95, alpha: .5, dashed: true, noSocket: true, col: C.cyc, name: 'A (생성 중)', nameCol: '#5aa9ff', sub: '①에 B가 필요' });
+        if (t > .4) E.arc([-3, LY.C, 1.6], [3, LY.C, 1.6], [90, 169, 255], ease(seg01(t, .4, .9)), 1.6);
+        obj('F', -3, { scale: sc, col: C.cyc, name: 'A', nameCol: '#5aa9ff', sub: 'b = null' });
+        obj('F', 3, { scale: sc, col: C.cyc, name: 'B', nameCol: '#5aa9ff', sub: 'a = null' }); } },
+    { dur: 3000, k: 'bad', t: '앞줄: B의 ①에는 A가 필요 → 서로 기다린다', d: 'A는 B를 기다리고, B는 A를 기다립니다. 둘 다 생성자를 끝낼 수 없어요 (공이 끝없이 돈다).',
+      draw: t => { stage();
+        obj('C', -3, { scale: .95, alpha: .5, dashed: true, noSocket: true, col: C.cyc, name: 'A (생성 중)', nameCol: '#5aa9ff', sub: 'B 기다리는 중' });
+        obj('C', 3, { scale: .95 * ease(seg01(t, 0, .3)) + .001, alpha: .5, dashed: true, noSocket: true, col: C.cyc, name: 'B (생성 중)', nameCol: '#5aa9ff', sub: 'A 기다리는 중' });
+        E.arc([-3, LY.C, 1.6], [3, LY.C, 1.6], [90, 169, 255], 1, 1.6);
+        if (t > .3) { E.arc([3, LY.C, 1.6], [-3, LY.C, 1.6], [242, 102, 122], ease(seg01(t, .3, .7)), -1.0);
+          const ph = (NOW / 900) % 1, up = ph < .5, q = up ? ph * 2 : (ph - .5) * 2, a = up ? [-3, LY.C, 1.6] : [3, LY.C, 1.6], b = up ? [3, LY.C, 1.6] : [-3, LY.C, 1.6], p = lerp(a, b, q); p[2] += Math.sin(Math.PI * q) * (up ? 1.6 : -1.0); E.ball(p, [245, 184, 74], 11); }
+        obj('F', -3, { col: C.cyc, name: 'A', nameCol: '#5aa9ff', sub: 'b = null' });
+        obj('F', 3, { col: C.cyc, name: 'B', nameCol: '#5aa9ff', sub: 'a = null' }); } },
+    { dur: 3600, k: 'bad', t: '앞줄 ❌ 기동 실패 (설계 문제를 즉시 발견) · 뒷줄 ② 서로 채워 일단 뜸 (문제 숨김)', d: '<b class="ok">생성자 주입</b>: <code>BeanCurrentlyInCreationException</code> → 애플리케이션이 안 뜹니다. "A와 B가 서로 의존한다"는 <b>설계 문제를 배포 전에</b> 알게 돼요.<br><b class="mid">필드 주입</b>: ②에서 컨테이너가 서로의 칸을 채워 일단 동작 → 문제가 숨습니다. <b>Spring Boot 2.6부터는 필드 주입이어도 순환 참조를 기본 금지</b>합니다.',
+      draw: t => { stage();
+        obj('C', -3, { scale: .95, alpha: .35, dashed: true, noSocket: true, col: C.cyc, name: 'A', nameCol: '#5aa9ff', sub: '생성 실패', a: .5 });
+        obj('C', 3, { scale: .95, alpha: .35, dashed: true, noSocket: true, col: C.cyc, name: 'B', nameCol: '#5aa9ff', sub: '생성 실패' });
+        E.burst([0, LY.C, 1.5], t, 'BeanCurrentlyInCreationException');
+        const p = ease(seg01(t, .1, .7)), got = t >= .7;
+        if (!got) { cube(lerp([3, LY.F, 1.2], [-3, LY.F, TOP], p).map((v, i) => i === 2 ? v + Math.sin(Math.PI * p) * 2 : v), C.cyc); cube(lerp([-3, LY.F, 1.2], [3, LY.F, TOP], p).map((v, i) => i === 2 ? v + Math.sin(Math.PI * p) * 2.6 : v), C.cyc); }
+        obj('F', -3, { col: C.cyc, dep: got ? 'cyc' : null, name: 'A', nameCol: '#5aa9ff', sub: got ? 'b = B ✓ (②에서)' : 'b = null' });
+        obj('F', 3, { col: C.cyc, dep: got ? 'cyc' : null, name: 'B', nameCol: '#5aa9ff', sub: got ? 'a = A ✓ (②에서)' : 'a = null' }); }, shake: t => Math.max(0, 1 - t * 3) * 6 },
+  ],
+};
+
+// ───────── 진행 (자동 넘김 / 수동 반복) ─────────
+let mode = 'BASE', seg = 0, segT = 0, auto = MOTION, speed = 1, last = 0, hold = 0;
+function renderUI() {
+  const list = SC[mode], s = list[seg];
+  $('cap').className = 'cap ' + (s.k || '');
+  $('cap').innerHTML = `<div class="step">장면 ${seg + 1} / ${list.length}</div><div class="title">${s.t}</div><div>${s.d || ''}</div>`;
+  $('script').innerHTML = list.map((x, i) => `<div class="s ${i === seg ? 'cur' : i < seg ? 'done' : ''}" data-i="${i}"><span class="n">${i + 1}</span><span>${x.t}</span></div>`).join('');
+  document.querySelectorAll('.script .s').forEach(el => el.onclick = () => { setAuto(false); jump(+el.dataset.i); });
+}
+function tick(now) {
+  NOW = now;
+  const dt = last ? Math.min(now - last, 60) : 0; last = now;
+  const list = SC[mode];
+  if (!MOTION) segT = list[seg].dur;
+  else if (auto) {
+    segT += dt * speed;
+    if (segT >= list[seg].dur) {
+      if (seg < list.length - 1) { seg++; segT = 0; renderUI(); }
+      else { hold += dt; segT = list[seg].dur; if (hold > 1800) { seg = 0; segT = 0; hold = 0; renderUI(); } }
+    }
+  } else { segT += dt * speed; if (segT >= list[seg].dur + 1000) segT = 0; }
+  const s = list[seg], t = Math.min(segT / s.dur, 1);
+  E.frame(() => s.draw(t), s.shake ? s.shake(t) : 0);
+  requestAnimationFrame(tick);
+}
+function jump(i) { seg = Math.max(0, Math.min(i, SC[mode].length - 1)); segT = 0; hold = 0; renderUI(); }
+function setAuto(a) { auto = a; $('play').textContent = a ? '⏸ 자동 넘김 끄기' : '▶ 자동 넘김 켜기'; }
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); jump(0);
+});
+$('prev').onclick = () => { setAuto(false); jump(seg - 1); };
+$('next').onclick = () => { setAuto(false); jump(seg + 1); };
+$('replay').onclick = () => { jump(0); setAuto(true); };
+$('play').onclick = () => setAuto(!auto);
+$('speed').oninput = e => speed = +e.target.value;
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') { setAuto(false); jump(seg + 1); }
+  if (e.key === 'ArrowLeft') { setAuto(false); jump(seg - 1); }
+  if (e.key === ' ') { e.preventDefault(); setAuto(!auto); }
+});
+const h = location.hash.slice(1).match(/^([A-Z]+)(\d+)?$/);
+if (h && SC[h[1]]) { mode = h[1]; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x.dataset.m === mode)); if (h[2]) { auto = false; jump(+h[2] - 1); segT = SC[mode][seg].dur * 0.75; } }
+setAuto(auto); renderUI();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -46,6 +46,13 @@
   .narr .step { font-size: 13px; color: var(--blue); font-weight: 700; }
   .narr .title { font-size: 20px; font-weight: 800; margin: 2px 0 8px; }
   .narr .body { font-size: 15px; }
+  /* 3D 장면 */
+  .viewport { position: relative; border: 2px solid var(--line); border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #18222e, #0b0f14 75%); margin-bottom: 16px; }
+  #cv3 { display: block; width: 100%; height: 440px; cursor: grab; touch-action: none; }
+  #cv3:active { cursor: grabbing; }
+  .hint3 { position: absolute; right: 12px; top: 10px; font-size: 12.5px; color: var(--dim); background: rgba(15,20,25,.7); padding: 3px 10px; border-radius: 99px; pointer-events: none; }
+  .legend3 { position: absolute; left: 12px; top: 10px; font-size: 12.5px; color: var(--dim); background: rgba(15,20,25,.75); padding: 6px 10px; border-radius: 10px; pointer-events: none; }
+  .legend3 i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin: 0 4px 0 8px; }
   .narr.star { border-color: var(--violet); background: #1d1730; }
   .narr.star .step { color: var(--violet); }
 
@@ -149,6 +156,12 @@ public class OrderController {
     </div>
 
     <div class="narr" id="narr"></div>
+
+    <div class="viewport">
+      <canvas id="cv3"></canvas>
+      <div class="legend3">3D 공장 —<i style="background:#5aa9ff"></i>원본 @1<i style="background:#b58cff"></i>프록시 @2<i style="background:#3ecf8e"></i>OrderController @3<i style="background:#f5b84a"></i>싱글톤 저장소</div>
+      <div class="hint3">🖱 드래그해서 돌려 보기 · 더블클릭 = 원위치</div>
+    </div>
 
     <div class="stage">
       <div>
@@ -408,13 +421,163 @@ function play(before) {
   });
 }
 function narrIn() { if (MOTION) [...$('narr').children].forEach((el, k) => el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 350, delay: k * 40, easing: EASE, fill: 'backwards' })); }
-function go(n) { const b = snap(); i = n; render(); play(b); narrIn(); }
+function go(n) { const b = snap(); prevI3 = i; stepStart3 = performance.now(); i = n; render(); play(b); narrIn(); }
 $('next').onclick = () => go(i + 1);
 $('prev').onclick = () => go(i - 1);
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' && i < S.length - 1) go(i + 1);
   if (e.key === 'ArrowLeft' && i > 0) go(i - 1);
 });
+
+// ───────── 3D 공장 (아래 단계와 연동) — 캔버스 · 원근 투영 · 화가 알고리즘 ─────────
+const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
+const ease = t => t <= 0 ? 0 : t >= 1 ? 1 : t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+function Engine(cv, cfg) {
+  const ctx = cv.getContext('2d');
+  const S = { yaw: cfg.yaw, pitch: cfg.pitch, W: 0, H: 0 };
+  let faces = [], over = [];
+  const rgba = (c, a, s = 1) => `rgba(${c.map(v => Math.round(Math.min(255, v * s))).join(',')},${a})`;
+  function resize() { const d = devicePixelRatio || 1; S.W = cv.clientWidth; S.H = cv.clientHeight; cv.width = S.W * d; cv.height = S.H * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  function proj([x, y, z]) {
+    x -= cfg.center;
+    const cy = Math.cos(S.yaw), sy = Math.sin(S.yaw), cp = Math.cos(S.pitch), sp = Math.sin(S.pitch);
+    const x1 = x * cy - y * sy, y1 = x * sy + y * cy, y2 = y1 * cp - z * sp, z2 = y1 * sp + z * cp;
+    const D = 38, f = Math.min(S.W * 1.5, S.H * 3.3) * cfg.zoom, k = f / (D + y2);
+    return { x: S.W / 2 + x1 * k, y: S.H * cfg.horizon - z2 * k, d: y2, s: D / (D + y2) };
+  }
+  function box(c, s, col, o = {}) {
+    const sc = o.scale ?? 1; if (sc <= 0.01) return;
+    const [cx, cy, cz] = c, [sx, sy, sz] = s.map(v => v * sc / 2);
+    const v = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(([a, b, e]) => [cx + a * sx, cy + b * sy, cz + e * sz]);
+    [[0,1,2,3,.45],[4,5,6,7,1],[0,1,5,4,.8],[3,2,6,7,.6],[0,3,7,4,.68],[1,2,6,5,.72]].forEach(f => {
+      const pts = f.slice(0, 4).map(k => v[k]);
+      faces.push({ pts, shade: f[4], col, o, d: pts.reduce((a, p) => a + proj(p).d, 0) / 4 });
+    });
+  }
+  function poly(pts) { ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); }
+  function label(pos, text, color, sub, a = 1) {
+    over.push(() => {
+      const p = proj(pos); ctx.globalAlpha = a;
+      ctx.font = '700 13px -apple-system, "Apple SD Gothic Neo", sans-serif';
+      const w1 = ctx.measureText(text).width; ctx.font = '500 11.5px -apple-system, sans-serif';
+      const w = Math.max(w1, sub ? ctx.measureText(sub).width : 0) + 18, h = sub ? 38 : 22;
+      ctx.fillStyle = 'rgba(13,17,22,.88)'; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(p.x - w / 2, p.y - h, w, h, 8); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.font = '700 13px -apple-system, "Apple SD Gothic Neo", sans-serif'; ctx.fillStyle = color; ctx.fillText(text, p.x, p.y - h + 15);
+      if (sub) { ctx.font = '500 11.5px -apple-system, sans-serif'; ctx.fillStyle = '#c3cbd5'; ctx.fillText(sub, p.x, p.y - 7); }
+      ctx.globalAlpha = 1;
+    });
+  }
+  function emoji(pos, ch, size = 24) { over.push(() => { const p = proj(pos); ctx.font = `${size * p.s * 1.1}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, p.x, p.y); ctx.textBaseline = 'alphabetic'; }); }
+  function ball(pos, col, r = 14) {
+    over.push(() => {
+      const c = proj(pos), R = r * c.s * 1.1, sh = proj([pos[0], pos[1], 0]);
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(sh.x, sh.y, R, R * .4, 0, 0, 7); ctx.fill();
+      const g = ctx.createRadialGradient(c.x - R / 3, c.y - R / 3, R / 6, c.x, c.y, R);
+      g.addColorStop(0, '#fff'); g.addColorStop(.35, rgba(col, 1)); g.addColorStop(1, rgba(col, 1, .55));
+      ctx.shadowColor = rgba(col, .9); ctx.shadowBlur = 20; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    });
+  }
+  function arc(a, b, col, prog = 1, lift = 2) {
+    over.push(() => {
+      const n = 24, pts = [];
+      for (let k = 0; k <= n * prog; k++) { const t = k / n, p = lerp(a, b, t); p[2] += Math.sin(Math.PI * t) * lift; pts.push(proj(p)); }
+      if (pts.length < 2) return;
+      ctx.strokeStyle = rgba(col, .95); ctx.lineWidth = 3; ctx.setLineDash([8, 6]);
+      ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); ctx.setLineDash([]);
+      const e = pts[pts.length - 1], q = pts[pts.length - 2], ang = Math.atan2(e.y - q.y, e.x - q.x);
+      ctx.fillStyle = rgba(col, 1); ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x - 13 * Math.cos(ang - .45), e.y - 13 * Math.sin(ang - .45)); ctx.lineTo(e.x - 13 * Math.cos(ang + .45), e.y - 13 * Math.sin(ang + .45)); ctx.closePath(); ctx.fill();
+    });
+  }
+  function grid() {
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(80,100,120,.16)';
+    for (let x = -14; x <= 12; x += 1.5) { const a = proj([x, -7, 0]), b = proj([x, 7, 0]); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+    for (let y = -7; y <= 7; y += 1.5) { const a = proj([-14, y, 0]), b = proj([12, y, 0]); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  }
+  function frame(fn) {
+    ctx.clearRect(0, 0, S.W, S.H); faces = []; over = [];
+    grid(); fn();
+    faces.sort((a, b) => b.d - a.d);
+    for (const f of faces) {
+      const a = f.o.alpha ?? .9, la = f.o.lineA ?? 1;
+      poly(f.pts.map(proj)); ctx.fillStyle = rgba(f.col, a, f.shade * (f.o.glow ? 1.2 : .78)); ctx.fill();
+      ctx.strokeStyle = rgba(f.col, .95 * la); ctx.lineWidth = 1.3; if (f.o.dashed) ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    over.forEach(f => f());
+  }
+  let drag = null;
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw: S.yaw, pitch: S.pitch }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => { if (!drag) return; S.yaw = drag.yaw + (e.clientX - drag.x) * .006; S.pitch = Math.max(.15, Math.min(1.3, drag.pitch + (e.clientY - drag.y) * .005)); });
+  cv.addEventListener('pointerup', () => drag = null);
+  cv.addEventListener('dblclick', () => { S.yaw = cfg.yaw; S.pitch = cfg.pitch; });
+  addEventListener('resize', resize); resize();
+  return { box, label, emoji, ball, arc, frame };
+}
+
+const E3 = Engine($('cv3'), { yaw: -0.2, pitch: 0.72, center: -1, zoom: .82, horizon: .6 });
+const C3 = { o1: [90, 169, 255], o2: [181, 140, 255], o3: [62, 207, 142], reg: [245, 184, 74], bp: [139, 149, 163] };
+const STN = [[-9, '① 생성자'], [-6, '② 주입'], [-3, '③ BPP before'], [0, '④ init'], [3, '⑤ BPP after ★']];
+const STN_OF = [-1, 0, 1, 2, 2, 3, 4, 4, 4, 4, -1, -1, -1, -1];     // 단계 i → 지금 일하는 스테이션
+const O1X = [-9, -9, -6, -3, -3, 0, 3, 3, 3, 3, 3, 3, 3, 3];        // 단계 i → 원본 @1의 x 위치
+const SHELF = [9, 0, 0.25], SLOT_OS = [9, -1.3, .85], SLOT_OC = [9, 1.3, .85], CTRL3 = [-5, 5, 0.7], SOCK = [-5, 5, 1.85];
+let prevI3 = i, stepStart3 = 0;
+// 단계 i일 때의 정지 상태 (단계가 바뀌면 이전 상태 → 지금 상태로 0.8초 동안 보간)
+const st3 = k => ({ x: O1X[k], o1: k >= 1 ? 1 : 0, shell: k >= 7 ? 1 : 0, ctrl: k >= 11 ? 1 : 0 });
+function draw3(now) {
+  const p = ease(Math.min((now - stepStart3) / 800, 1)), a = st3(prevI3), b = st3(i);
+  const x = a.x + (b.x - a.x) * p, o1 = a.o1 + (b.o1 - a.o1) * p, sh = a.shell + (b.shell - a.shell) * p, ct = a.ctrl + (b.ctrl - a.ctrl) * p;
+  const bob = Math.sin(now / 260) * .08, fly = ease(Math.min((now - stepStart3) / 1100, 1));
+  E3.frame(() => {
+    // 스테이션 바닥 띠
+    STN.forEach(([sx, t], k) => {
+      const on = STN_OF[i] === k;
+      E3.box([sx, 0, 0.01], [2.6, 5.4, 0.02], on ? (k === 4 ? C3.o2 : [90, 169, 255]) : [90, 169, 255], { alpha: on ? .22 : .05, lineA: on ? .9 : .25 });
+      E3.label([sx, -3.3, 0], t, on ? (k === 4 ? '#b58cff' : '#8bc4ff') : '#6b7785');
+    });
+    // 설계도 (BeanDefinition)
+    E3.box([-12.5, -1.4, 0.06], [2.2, 1.6, 0.1], C3.bp, { alpha: .7 }); E3.label([-12.5, -1.4, 0.6], 'BeanDefinition', '#a7b0bb', 'orderService');
+    E3.box([-12.5, 2.2, 0.06], [2.2, 1.6, 0.1], C3.bp, { alpha: .7 }); E3.label([-12.5, 2.2, 0.6], 'BeanDefinition', '#a7b0bb', 'orderController');
+    // 싱글톤 저장소 선반
+    E3.box(SHELF, [2.6, 4.6, .5], C3.reg, { alpha: .5 }); E3.label([9, 0, 2.6], '📦 싱글톤 저장소', '#f5b84a');
+    E3.box([9, -1.3, .52], [1.1, 1.1, .04], C3.reg, { alpha: .9 }); E3.box([9, 1.3, .52], [1.1, 1.1, .04], C3.reg, { alpha: .9 });
+    E3.label([11.4, -1.3, .2], '"orderService"', '#f5b84a', i >= 10 ? '→ @2' : '비어 있음'); E3.label([11.4, 1.3, .2], '"orderController"', '#f5b84a', i >= 12 ? '→ @3' : '비어 있음');
+    // 원본 @1 (+ 프록시 @2 껍데기)
+    if (o1 > .01) {
+      E3.box([x, 0, .8 * o1], [2.4, 2.0, 1.6], C3.o1, { alpha: .92, scale: o1 });
+      E3.label([x, 0, 2.0 + (sh > .3 ? 0 : .2)], '원본 @1', '#5aa9ff', i === 2 ? '주입 중' : i === 4 ? '@PostConstruct 실행 중' : 'OrderService');
+    }
+    if (sh > .01) {
+      E3.box([x, 0, 1.4], [4.0, 3.4, 2.8], C3.o2, { alpha: .16 * sh, lineA: sh, scale: 1 + (1 - sh) * .7 });
+      const g = i === 13;
+      E3.box([x - 2.0, 0, .95], [.06, 1.6, 1.7], C3.o2, { alpha: (g ? .5 + .4 * Math.sin(now / 140) : .35) * sh, lineA: sh, glow: g });
+      E3.label([x, 0, 3.6], '프록시 @2 (껍데기)', '#b58cff', i === 8 ? 'result = @2' : i === 9 ? 'exposedObject = @2' : '보라 문 = 게이트', sh);
+    }
+    // 단계별 효과
+    if (i === 0) { E3.arc([CTRL3[0], CTRL3[1], 1.8], [-9, 0, 1.4], [242, 102, 122], fly, 2.5); E3.emoji([CTRL3[0], CTRL3[1], 2.6 + bob], '❓', 30); }
+    if (i === 4) E3.emoji([x + 1.6, -1.2, 2.2 + bob * 3], '✨', 34);
+    if (i === 6) { const z = ((now / 1000) % 1) * 2.0; E3.box([x, 0, z], [3.2, 2.8, .05], C3.o2, { alpha: .35, glow: true }); E3.label([x + 2.4, -1.5, 2.6], '"@Transactional 있나?"', '#b58cff', 'Advisor 매칭 검사'); }
+    if (i === 7 && fly < 1) E3.emoji([x, 0, 3.0 + fly], '✨', 40);
+    // OrderController @3
+    E3.box(CTRL3, [2.4, 2.0, 1.4], C3.o3, ct > .5 ? { alpha: .92 } : { alpha: .15, dashed: true, lineA: .6 });
+    E3.label([CTRL3[0], CTRL3[1], 3.1], 'OrderController @3', '#3ecf8e', ct > .5 ? 'orderService = @2' : '생성 대기 — OrderService가 먼저', ct > .5 ? 1 : .75);
+    // 참조(작은 큐브)의 이동: 저장소 등록 → 컨트롤러 주입 → 컨트롤러 등록
+    const chip = (pos, col) => E3.box(pos, [.7, .7, .7], col, { alpha: .95 });
+    const arcPos = (s, e, t, lift) => { const q = lerp(s, e, t); q[2] += Math.sin(Math.PI * t) * lift; return q; };
+    if (i === 10) chip(arcPos([x, 0, 3.0], SLOT_OS, fly, 2.5), C3.o2);
+    if (i >= 11 || (i === 10 && fly >= 1)) chip(SLOT_OS, C3.o2);
+    if (i === 11) chip(arcPos(SLOT_OS, SOCK, fly, 3), C3.o2);
+    if (i >= 12 || (i === 11 && fly >= 1)) chip(SOCK, C3.o2);
+    if (i === 12) chip(arcPos([CTRL3[0], CTRL3[1], 2.2], SLOT_OC, fly, 3), C3.o3);
+    if (i >= 13 || (i === 12 && fly >= 1)) chip(SLOT_OC, C3.o3);
+    // 런타임 요청: @3 → 게이트(@2) → @1 → 게이트 → @3 반복
+    if (i === 13) {
+      const P0 = [CTRL3[0] + 1.3, CTRL3[1], 1.0], PG = [x - 2.0, 0, 1.0], P1 = [x, 0, 1.0];
+      const ph = (now / 3200) % 1, path = [P0, PG, P1, PG, P0], seg = Math.min(Math.floor(ph * 4), 3), lt = ease(ph * 4 - seg);
+      E3.ball(lerp(path[seg], path[seg + 1], lt), [245, 184, 74]);
+    }
+  });
+}
+(function loop3(now) { draw3(now); requestAnimationFrame(loop3); })(0);
 render();
 </script>
 </body>
