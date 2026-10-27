@@ -204,11 +204,13 @@ allOpen {
     </table>
     <div class="say">면접용: <b>"JPA 엔티티는 Hibernate가 리플렉션으로 빈 객체를 만들 수 있도록 인자 없는 생성자가 필요하고, 지연 로딩 프록시가 엔티티를 상속하므로 final이면 안 됩니다. Kotlin은 둘 다 기본으로 어기기 때문에 plugin.jpa로 생성자를 만들고, allOpen으로 @Entity 클래스를 open으로 엽니다."</b></div>
     <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
-      <a style="color:var(--blue)" href="https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1">Jakarta Persistence 3.1 §2.1 The Entity Class</a>
+      <a style="color:var(--blue)" href="https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html">Jakarta Persistence 3.1 §2.1 The Entity Class</a>
       (<i>"The entity class must have a no-arg constructor… The entity class must not be final. No methods or persistent instance variables of the entity class may be final."</i>) ·
-      <a style="color:var(--blue)" href="https://kotlinlang.org/docs/no-arg-plugin.html">Kotlin — No-arg compiler plugin (JPA support)</a> ·
-      <a style="color:var(--blue)" href="https://kotlinlang.org/docs/all-open-plugin.html">Kotlin — All-open compiler plugin (Spring support)</a> ·
-      <a style="color:var(--blue)" href="https://spring.io/guides/tutorials/spring-boot-kotlin">Spring Guide — Building web applications with Spring Boot and Kotlin (allOpen for JPA)</a></p>
+      <a style="color:var(--blue)" href="https://kotlinlang.org/docs/kotlin-jpa-plugin.html">Kotlin — kotlin-jpa plugin</a>
+      (<i>"If entities aren't open, lazy loading won't work."</i>) ·
+      <a style="color:var(--blue)" href="https://kotlinlang.org/docs/kotlin-spring-plugin.html">Kotlin — kotlin-spring plugin (열어 주는 어노테이션 목록)</a> ·
+      <a style="color:var(--blue)" href="https://docs.hibernate.org/orm/6.6/userguide/html_single/#entity-pojo-final">Hibernate 6.6 User Guide — Prefer non-final classes</a>
+      (<i>"…will stop Hibernate from being able to generate proxies for lazy-loading the entity."</i>)</p>
   </section>
 </main>
 
