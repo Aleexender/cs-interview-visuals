@@ -34,6 +34,12 @@
   .cap { border: 2px solid var(--blue); border-radius: 14px; background: #131d2a; padding: 12px 18px; margin-bottom: 12px; min-height: 112px; }
   .cap .step { font-size: 13px; color: var(--blue); font-weight: 700; }
   .cap .title { font-size: 20px; font-weight: 800; margin: 2px 0 4px; }
+  .cbs { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 6px; }
+  .cb { display: inline-block; padding: 1px 10px; border-radius: 99px; font-size: 12.5px; font-weight: 700; border: 1px solid transparent; }
+  .cb.sym { background: #13304d; color: #8fc6ff; border-color: #2f5f8f; }
+  .cb.asym { background: #3a2a10; color: #ffcf7a; border-color: #7a5a1f; }
+  .cb.none { background: #252d38; color: var(--dim); }
+  .cb.bad { background: #3a1a22; color: #ff9aa8; border-color: #7a2f3b; }
   .cap.bad { border-color: var(--no); background: #2c1a1e; } .cap.bad .step { color: var(--no); }
   .cap.good { border-color: var(--ok); background: #16291f; } .cap.good .step { color: var(--ok); }
   .cap.key { border-color: var(--violet); background: #1d1730; } .cap.key .step { color: var(--violet); }
@@ -146,17 +152,26 @@
   <section>
     <h2><span class="num">3</span>단계 정리 (TLS 1.3)</h2>
     <table>
-      <tr><th>#</th><th>누가</th><th>무엇을</th><th>왜</th></tr>
-      <tr><td>①</td><td>브라우저</td><td><b>ClientHello</b> — random, 지원 버전·암호 스위트, <b>key_share</b>(임시 DH 공개값), SNI, ALPN</td><td>key_share를 처음부터 보내서 왕복 1번(1-RTT). SNI로 어느 인증서를 줄지 알림</td></tr>
-      <tr><td>②</td><td>서버</td><td><b>ServerHello</b> — random, 고른 스위트, <b>자기 key_share</b></td><td>공개값이 모였으니 <b>양쪽이 각자 같은 공유 비밀 계산</b>(ECDHE). 비밀은 전송 안 됨</td></tr>
-      <tr><td>—</td><td>양쪽</td><td>공유 비밀 → <b>핸드셰이크 키</b></td><td>이후는 인증서까지 전부 암호화</td></tr>
-      <tr><td>③④</td><td>서버</td><td>{EncryptedExtensions} {<b>Certificate</b>} 서버+중간 CA 인증서</td><td>"이 공개키는 api.example.com의 것" — CA 보증서</td></tr>
-      <tr><td>⑤</td><td>서버</td><td>{<b>CertificateVerify</b>} 대화 전체에 <b>개인키로 서명</b></td><td>인증서는 누구나 복사 가능. <b>개인키 소유</b>를 증명 → 중간자 차단</td></tr>
-      <tr><td>⑥</td><td>서버</td><td>{<b>Finished</b>} 대화 전체의 MAC</td><td>①②가 바꿔치기(다운그레이드)되지 않았음을 확인</td></tr>
-      <tr><td>⑦</td><td>브라우저</td><td><b>검증</b>: 루트 CA까지 체인 · 도메인(SAN) · 유효기간·폐기 · CertificateVerify · Finished</td><td>하나라도 실패하면 중단</td></tr>
-      <tr><td>⑧</td><td>브라우저</td><td>{<b>Finished</b>}</td><td>브라우저 쪽 대화도 같다는 확인</td></tr>
-      <tr><td>⑨</td><td>브라우저</td><td>[<b>GET /orders</b>] 애플리케이션 키 + AEAD</td><td>이후 데이터는 빠른 대칭 암호 + 변조 검출</td></tr>
+      <tr><th>#</th><th>누가</th><th>무엇을</th><th>왜</th><th>암호 방식</th></tr>
+      <tr><td>①</td><td>브라우저</td><td><b>ClientHello</b> — random, 지원 버전·암호 스위트, <b>key_share</b>(임시 DH 공개값), SNI, ALPN</td><td>key_share를 처음부터 보내서 왕복 1번(1-RTT). SNI로 어느 인증서를 줄지 알림</td><td><span class="cb none">평문</span> <span class="cb asym">key_share = 비대칭 계열 공개값</span></td></tr>
+      <tr><td>②</td><td>서버</td><td><b>ServerHello</b> — random, 고른 스위트, <b>자기 key_share</b></td><td>공개값이 모였으니 <b>양쪽이 각자 같은 공유 비밀 계산</b>(ECDHE). 비밀은 전송 안 됨</td><td><span class="cb none">평문</span> <span class="cb asym">key_share = 비대칭 계열 공개값</span></td></tr>
+      <tr><td>—</td><td>양쪽</td><td>공유 비밀 → <b>핸드셰이크 키</b></td><td>이후는 인증서까지 전부 암호화</td><td><span class="cb asym">ECDHE(비대칭 계열)로</span> → <span class="cb sym">대칭키를 만들어 냄</span></td></tr>
+      <tr><td>③④</td><td>서버</td><td>{EncryptedExtensions} {<b>Certificate</b>} 서버+중간 CA 인증서</td><td>"이 공개키는 api.example.com의 것" — CA 보증서</td><td><span class="cb sym">대칭키 암호화 (server 핸드셰이크 키 · AES-GCM)</span></td></tr>
+      <tr><td>⑤</td><td>서버</td><td>{<b>CertificateVerify</b>} 대화 전체에 <b>개인키로 서명</b></td><td>인증서는 누구나 복사 가능. <b>개인키 소유</b>를 증명 → 중간자 차단</td><td><span class="cb sym">운반: 대칭키 암호화</span> <span class="cb asym">내용: 비대칭 서명 (서버 개인키)</span></td></tr>
+      <tr><td>⑥</td><td>서버</td><td>{<b>Finished</b>} 대화 전체의 MAC</td><td>①②가 바꿔치기(다운그레이드)되지 않았음을 확인</td><td><span class="cb sym">운반: 대칭키 암호화</span> <span class="cb sym">내용: MAC (대칭 · HMAC)</span></td></tr>
+      <tr><td>⑦</td><td>브라우저</td><td><b>검증</b>: 루트 CA까지 체인 · 도메인(SAN) · 유효기간·폐기 · CertificateVerify · Finished</td><td>하나라도 실패하면 중단</td><td><span class="cb asym">체인·⑤ 서명 확인: 공개키 (비대칭)</span> <span class="cb sym">⑥ 확인: MAC (대칭)</span></td></tr>
+      <tr><td>⑧</td><td>브라우저</td><td>{<b>Finished</b>}</td><td>브라우저 쪽 대화도 같다는 확인</td><td><span class="cb sym">대칭키 암호화 (client 핸드셰이크 키)</span></td></tr>
+      <tr><td>⑨</td><td>브라우저</td><td>[<b>GET /orders</b>] 애플리케이션 키 + AEAD</td><td>이후 데이터는 빠른 대칭 암호 + 변조 검출</td><td><span class="cb sym">대칭키 암호화 (애플리케이션 키 · AES-GCM)</span></td></tr>
     </table>
+    <h2 style="margin-top:22px"><span class="num">4</span>대칭키 vs 비대칭키 — 어디에 무엇을 쓰나</h2>
+    <table>
+      <tr><th></th><th><span class="cb asym">🗝 비대칭 (공개키 · 개인키)</span></th><th><span class="cb sym">🔐 대칭 (같은 키로 잠그고 엶)</span></th></tr>
+      <tr><td>TLS 1.3에서 쓰는 곳</td><td>① <b>ECDHE 키 합의</b> — 공개값 aG·bG만 교환해 같은 비밀을 각자 계산<br>② <b>CertificateVerify 서명</b> — 서버 개인키로 서명, 인증서 공개키로 확인<br>③ <b>인증서 체인 검증</b> — CA 서명을 CA 공개키로 확인</td><td>③④⑤⑥⑧ 핸드셰이크 메시지 암호화 (핸드셰이크 키)<br>⑨ 이후 모든 HTTP 데이터 암호화 (애플리케이션 키)<br>Finished의 MAC</td></tr>
+      <tr><td>데이터를 "암호화"하나?</td><td><b>아니오.</b> TLS 1.3에서 비대칭으로 데이터를 잠그는 일은 없다</td><td><b>예.</b> 실제 데이터는 전부 대칭키(AES-GCM 등)로</td></tr>
+      <tr><td>왜 그렇게 나누나</td><td>느리고 한 번에 작은 데이터만 다룰 수 있음 → <b>키 합의와 신원 증명</b>에만</td><td>수백~수천 배 빠름(CPU에 AES 전용 명령어) · 크기 제한 없음 → <b>실제 데이터</b>에</td></tr>
+      <tr><td>TLS 1.2 RSA (비교)</td><td><span class="cb bad">pre-master secret을 서버 공개키로 "암호화"</span> — 비대칭으로 잠근 유일한 데이터. 그래서 개인키가 털리면 과거가 열림</td><td>세션 키로 데이터 암호화 (1.3과 같음)</td></tr>
+    </table>
+    <div class="say" style="border-left-color:var(--mid);background:#2a2416">⚠ 흔한 오해: <b>"HTTPS는 공개키로 데이터를 암호화한다"</b> → 아니다. 공개키 계열은 <b>키 합의(ECDHE)와 서명</b>에만 쓰고, 데이터는 <b>그렇게 만든 대칭키</b>로 암호화한다.</div>
     <div class="say">면접용: <b>"브라우저가 ClientHello에 지원 스위트와 임시 DH 공개값(key_share)을 담아 보내고, 서버가 ServerHello로 자기 key_share를 보내면 양쪽이 ECDHE로 같은 공유 비밀을 각자 계산합니다. 이후 암호화된 채로 서버가 인증서 체인, 개인키로 대화 전체에 서명한 CertificateVerify, Finished를 보내고, 브라우저는 루트 CA까지 체인과 도메인·유효기간·서명·Finished를 검증한 뒤 자신의 Finished를 보냅니다. 왕복은 1번이고, 임시 키를 버리므로 나중에 개인키가 털려도 과거 대화는 안전합니다."</b></div>
     <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
       <a style="color:var(--blue)" href="https://datatracker.ietf.org/doc/html/rfc8446">RFC 8446 — TLS 1.3</a>
@@ -500,6 +515,29 @@ const D5 = [
 SC.A[3].detail = { name: '장면 4 · ECDHE로 같은 키 만들기', steps: D4 };
 SC.A[4].detail = { name: '장면 5 · ③④를 어떻게 잠그나', steps: D5 };
 
+// 장면마다 "이 장면에서 쓰는 암호 방식" 배지
+const B_ = { none: t => `<span class="cb none">${t}</span>`, sym: t => `<span class="cb sym">🔐 ${t}</span>`, asym: t => `<span class="cb asym">🗝 ${t}</span>`, bad: t => `<span class="cb bad">⚠ ${t}</span>` };
+const CRY = {
+  A: [B_.none('아직 암호 없음'),
+      B_.none('평문') + B_.asym('key_share = 비대칭 계열 공개값 aG'),
+      B_.none('평문') + B_.asym('key_share = 비대칭 계열 공개값 bG'),
+      B_.asym('ECDHE (비대칭 계열)로') + B_.sym('대칭키(핸드셰이크 키)를 각자 만들어 냄'),
+      B_.sym('대칭키 암호화 — server 핸드셰이크 키 · AES-GCM'),
+      B_.sym('운반: 대칭키 암호화') + B_.asym('내용: 서버 개인키로 비대칭 서명'),
+      B_.sym('운반: 대칭키 암호화') + B_.sym('내용: MAC (대칭)'),
+      B_.asym('체인·⑤ 서명 확인 = 공개키(비대칭)') + B_.sym('⑥ 확인 = MAC(대칭)'),
+      B_.sym('대칭키 암호화 — client 핸드셰이크 키'),
+      B_.sym('대칭키 암호화 — 애플리케이션 키 · AES-GCM'),
+      B_.asym('개인키(비대칭)는 서명에만 썼음') + B_.sym('대칭키는 복원 불가')],
+  B: [B_.none('아직 암호 없음'),
+      B_.none('평문'),
+      B_.none('평문 (인증서까지)'),
+      B_.bad('비대칭 암호화 — pre-master를 서버 공개키(RSA)로 잠금'),
+      B_.sym('pre-master로 대칭키(세션 키)를 만듦'),
+      B_.sym('대칭키 암호화 — 세션 키'),
+      B_.bad('개인키(비대칭)로 pre-master를 열면') + B_.sym('대칭키까지 복원됨')],
+};
+
 // 장면마다 시각 효과
 function drawScene(s, t) {
   stage(s, t);
@@ -539,7 +577,7 @@ function knowHtml(side) {
 function renderUI() {
   const list = SC[mode], s = list[seg];
   $('cap').className = 'cap ' + (s.k || '');
-  $('cap').innerHTML = `<div class="step">장면 ${seg + 1} / ${list.length} · ${mode === 'A' ? 'TLS 1.3' : 'TLS 1.2 RSA'}</div><div class="title">${s.t}</div><div>${s.d}</div>`
+  $('cap').innerHTML = `<div class="step">장면 ${seg + 1} / ${list.length} · ${mode === 'A' ? 'TLS 1.3' : 'TLS 1.2 RSA'}</div><div class="title">${s.t}</div><div class="cbs">${CRY[mode][seg]}</div><div>${s.d}</div>`
     + (s.detail ? `<button class="dbtn" id="dbtn">🔍 자세히 보기 — ${s.detail.steps[0].id} ~ ${s.detail.steps.at(-1).id} 단계별 계산</button>` : '');
   if (s.detail) $('dbtn').onclick = openDetail;
   $('kC').innerHTML = knowHtml('C'); $('kW').innerHTML = knowHtml('W'); $('kS').innerHTML = knowHtml('S');
