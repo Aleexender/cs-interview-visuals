@@ -63,6 +63,36 @@
   .script .s.cur { background: #1b2a40; border-color: var(--blue); }
   .script .s.cur .n { background: var(--blue); color: #0f1419; }
   @media (prefers-reduced-motion: reduce) { .it.new { animation: none; } }
+  /* 자세히 보기 (창 안의 창) */
+  .dbtn { margin-top: 10px; border-color: var(--violet); background: #2a2140; font-weight: 700; color: #e7dbff; animation: dpulse 1.8s ease-in-out infinite; }
+  @keyframes dpulse { 50% { box-shadow: 0 0 0 4px rgba(181,140,255,.25); } }
+  .modal { position: fixed; inset: 0; background: rgba(5,8,12,.74); display: none; align-items: flex-start; justify-content: center; z-index: 50; overflow: auto; padding: 28px 16px; }
+  .modal.on { display: flex; }
+  .mbox { max-width: 1120px; width: 100%; background: #151b23; border: 2px solid var(--violet); border-radius: 16px; padding: 18px 22px 22px; animation: mIn .3s ease-out; }
+  @keyframes mIn { from { transform: translateY(16px) scale(.98); opacity: 0; } }
+  .mhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .mhead .k { font-size: 13px; color: var(--violet); font-weight: 700; }
+  .mhead .tt { font-size: 21px; font-weight: 800; }
+  .mtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 10px; }
+  .mtabs button { padding: 5px 12px; font-size: 13px; }
+  .mtabs button.on { border-color: var(--violet); background: #2a2140; color: #e7dbff; font-weight: 700; }
+  .mtabs button.done { opacity: .55; }
+  .mdesc { border-left: 4px solid var(--violet); background: #1d1730; padding: 10px 14px; border-radius: 6px; font-size: 15px; }
+  .mcols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .mc { border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #11161c; min-height: 120px; transition: box-shadow .3s; }
+  .mc .t { font-weight: 800; font-size: 13.5px; margin-bottom: 6px; }
+  .mc.c .t { color: var(--ok); } .mc.w .t { color: var(--no); } .mc.s .t { color: var(--blue); }
+  .mc.act.c { border-color: var(--ok); box-shadow: 0 0 22px rgba(62,207,142,.25); }
+  .mc.act.w { border-color: var(--no); box-shadow: 0 0 22px rgba(242,102,122,.25); }
+  .mc.act.s { border-color: var(--blue); box-shadow: 0 0 22px rgba(90,169,255,.25); }
+  .calc { background: #0d1116; border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; line-height: 1.95; margin-top: 12px; overflow-x: auto; }
+  .calc .ct { font-family: -apple-system, sans-serif; font-weight: 800; font-size: 13px; color: var(--mid); margin-bottom: 4px; }
+  .cl { white-space: pre; opacity: 0; animation: clIn .4s forwards; }
+  @keyframes clIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+  .cl .r { color: var(--ok); font-weight: 700; } .cl .p { color: var(--violet); font-weight: 700; } .cl .x { color: var(--no); font-weight: 700; } .cl .m { color: var(--dim); } .cl .y { color: var(--mid); font-weight: 700; } .cl .b { color: var(--blue); font-weight: 700; }
+  .mnav { display: flex; gap: 8px; justify-content: space-between; align-items: center; margin-top: 14px; }
+  @media (prefers-reduced-motion: reduce) { .cl { opacity: 1; animation: none; } .dbtn, .mbox { animation: none; } }
+  @media (max-width: 900px) { .mcols { grid-template-columns: 1fr; } }
   @media (max-width: 900px) { canvas { height: 380px; } .two, .know { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -133,6 +163,29 @@
       (Figure 1 <i>"Message Flow for Full TLS Handshake"</i> · <i>"CertificateVerify: A signature over the entire handshake using the private key corresponding to the public key in the Certificate message."</i> · <i>"Static RSA and Diffie-Hellman cipher suites have been removed; all public-key based key exchange mechanisms now provide forward secrecy."</i>)</p>
   </section>
 </main>
+
+<!-- 자세히 보기: 장면 안의 하위 단계 -->
+<div class="modal" id="modal">
+  <div class="mbox">
+    <div class="mhead">
+      <div><div class="k" id="mKick"></div><div class="tt" id="mTitle"></div></div>
+      <button id="mClose">✕ 닫기 (Esc)</button>
+    </div>
+    <div class="mtabs" id="mTabs"></div>
+    <div class="mdesc" id="mDesc"></div>
+    <div class="mcols">
+      <div class="mc c" id="mC"></div>
+      <div class="mc w" id="mW"></div>
+      <div class="mc s" id="mS"></div>
+    </div>
+    <div class="calc" id="mCalc"></div>
+    <div class="mnav">
+      <button id="mPrev">◀ 이전 단계</button>
+      <span class="dim" style="font-size:13px">← → 키로 이동 · 계산 줄이 위에서부터 하나씩 나타납니다</span>
+      <button id="mNext" class="primary">다음 단계 ▶</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -313,6 +366,140 @@ const SC = {
   ],
 };
 
+// ───────── 자세히 보기 데이터 (장면 4 · 장면 5) ─────────
+// 항목 앞의 ★ = 이번 단계에 새로 생긴 것. calc의 각 줄은 순서대로 나타난다.
+const D4 = [
+  { id: '4.1', who: ['C', 'S'], t: '재료 확인 — 장면 2·3이 끝난 순간 각자 손에 든 것',
+    d: '실제 TLS는 타원곡선(X25519) 위의 256비트 숫자를 쓰지만, <b>원리는 똑같으니 작은 숫자로</b> 따라갑니다. 공개 규칙은 <b>p = 23, g = 5</b>(누구나 앎). 그림의 <b>a·G = 8</b>, <b>b·G = 19</b>, <b>abG = 2</b>에 대응합니다.',
+    C: ['공개 규칙 p = 23, g = 5', '내 비밀 <b>a = 6</b> 🔒 (절대 안 보냄)', '내 공개값 A = 8 (①로 보냄)', '★ 받은 서버 공개값 <b>B = 19</b>'],
+    W: ['공개 규칙 p = 23, g = 5', 'A = 8 (① 녹화)', 'B = 19 (② 녹화)', 'ClientHello·ServerHello 바이트 전체'],
+    S: ['공개 규칙 p = 23, g = 5', '내 비밀 <b>b = 15</b> 🔒 (절대 안 보냄)', '내 공개값 B = 19 (②로 보냄)', '★ 받은 브라우저 공개값 <b>A = 8</b>'],
+    ct: '공개값은 이렇게 만들어서 보냈었다 (장면 2·3)',
+    calc: ['<span class="m">브라우저:</span> A = g^a mod p = 5^6 mod 23 = 15625 mod 23 = <span class="y">8</span>',
+           '<span class="m">서버:    </span> B = g^b mod p = 5^15 mod 23 = <span class="y">19</span>',
+           '<span class="m">→ 선 위로 지나간 건 8과 19뿐. 6과 15는 각자의 메모리 안에만 있다</span>'] },
+  { id: '4.2', who: ['C'], t: '브라우저가 계산 — "받은 B를 내 비밀 a만큼 거듭제곱"',
+    d: '<b>브라우저가</b> 서버에게서 받은 <b>19</b>에 자기 비밀 <b>6</b>을 써서 계산합니다. 큰 거듭제곱을 한 번에 하지 않고, 제곱해 가며 중간중간 23으로 나눈 나머지만 남깁니다.',
+    C: ['비밀 a = 6', '받은 B = 19', '★ <b class="p">공유 비밀 = 2</b>'], W: ['8, 19 (녹화본)'], S: ['비밀 b = 15', '받은 A = 8'],
+    ct: '브라우저: S = B^a mod p = 19^6 mod 23',
+    calc: ['19^2 = 361          → 361 mod 23 = <span class="y">16</span>',
+           '19^3 = 16 × 19 = 304 → 304 mod 23 = <span class="y">5</span>',
+           '19^6 = 5 × 5 = 25    → 25 mod 23  = <span class="r">2</span>',
+           '<span class="r">✅ 브라우저의 공유 비밀 = 2</span>'] },
+  { id: '4.3', who: ['S'], t: '서버가 계산 — "받은 A를 내 비밀 b만큼 거듭제곱"',
+    d: '<b>서버가</b> 브라우저에게서 받은 <b>8</b>에 자기 비밀 <b>15</b>를 써서 계산합니다. 서로 <b>다른 숫자로 다른 계산</b>을 했는데 같은 값이 나옵니다.',
+    C: ['★ <b class="p">공유 비밀 = 2</b>'], W: ['8, 19 (녹화본)'], S: ['비밀 b = 15', '받은 A = 8', '★ <b class="p">공유 비밀 = 2</b>'],
+    ct: '서버: S = A^b mod p = 8^15 mod 23',
+    calc: ['8^2 = 64             → 64 mod 23  = <span class="y">18</span>',
+           '8^4 = 18 × 18 = 324  → 324 mod 23 = <span class="y">2</span>',
+           '8^8 = 2 × 2 = <span class="y">4</span>',
+           '8^15 = 8^8 × 8^4 × 8^2 × 8^1 = 4 × 2 × 18 × 8 = 1152 → 1152 mod 23 = <span class="r">2</span>',
+           '<span class="r">✅ 서버의 공유 비밀 = 2</span>   (브라우저와 같다!)',
+           '<span class="m">왜 같나: 19^6 = (5^15)^6 = 5^90,  8^15 = (5^6)^15 = 5^90  → 둘 다 5^(6×15)</span>'] },
+  { id: '4.4', who: ['W'], t: '도청자도 해 보지만 — 8과 19만으로는 2를 못 만든다',
+    d: '<b>도청자는</b> 8과 19를 다 봤습니다. 그런데 공유 비밀을 만들려면 <b>6이나 15 중 하나</b>가 꼭 필요합니다. 공개값끼리 어떻게 섞어도 안 나옵니다.',
+    C: ['공유 비밀 = 2'], W: ['8, 19', '★ <b class="x">공유 비밀 = ? (계산 불가)</b>'], S: ['공유 비밀 = 2'],
+    ct: '도청자의 시도',
+    calc: ['시도 ① 8 × 19 mod 23 = 152 mod 23 = 14   <span class="x">❌ 2가 아님</span>',
+           '시도 ② 8 + 19 = 27 mod 23 = 4            <span class="x">❌</span>',
+           '정답 방법: a를 알아내야 한다 = "5를 몇 번 곱하면 23으로 나눈 나머지가 8?"',
+           '5^1=5  5^2=2  5^3=10  5^4=4  5^5=20  5^6=<span class="y">8</span>  → a = 6 발견 <span class="m">(숫자가 작아서 가능)</span>',
+           '<span class="x">실제 TLS: a는 256비트 난수 → 이렇게 거꾸로 찾는 데 2^128번 이상 계산 → 사실상 불가능 (타원곡선 이산로그 문제)</span>'] },
+  { id: '4.5', who: ['C', 'S', 'W'], t: '두 번째 재료 — 지금까지 대화의 해시(transcript hash)',
+    d: '키를 만들 때 공유 비밀만 쓰지 않고 <b>①②의 내용을 요약한 해시</b>도 섞습니다. 양쪽이 같은 바이트를 주고받았으니 해시도 같습니다. <b>도청자도 이 해시는 계산할 수 있습니다</b> — 비밀이 아니에요. 대신 누가 중간에 ①②를 몰래 바꿨다면 양쪽 해시가 달라져 키가 어긋나고, 통신이 바로 깨집니다.',
+    C: ['공유 비밀 = 2', '★ H = SHA-256(① ‖ ②)'], W: ['8, 19', '★ H = SHA-256(① ‖ ②) <span class="dim">(녹화한 바이트로 계산 가능)</span>'], S: ['공유 비밀 = 2', '★ H = SHA-256(① ‖ ②)'],
+    ct: 'transcript hash',
+    calc: ['H = SHA-256( ClientHello 바이트 ‖ ServerHello 바이트 )',
+           '  = 7c 1f 9a … e2  <span class="m">(예시 값, 32바이트)</span>',
+           '<span class="m">브라우저와 서버가 각자 계산 → 같은 값</span>',
+           '<span class="y">⚠ 도청자도 H는 안다. 키를 못 만드는 이유는 H가 아니라 공유 비밀(2)이 없어서다</span>'] },
+  { id: '4.6', who: ['C', 'S'], t: '키 뽑기 (HKDF) — 공유 비밀 + 해시 → 실제 암호화 키',
+    d: '<b>브라우저와 서버가 각자</b> 똑같은 공식(RFC 8446 key schedule)에 똑같은 재료를 넣습니다. 결과로 <b>방향마다 키(16바이트)와 IV(12바이트)</b>가 나옵니다. 서버→브라우저용과 브라우저→서버용이 따로 있어요.',
+    C: ['★ server_write_key / iv <span class="dim">(서버가 보낸 걸 열 때)</span>', '★ client_write_key / iv <span class="dim">(내가 보낼 때)</span>'],
+    W: ['H만 있음', '<b class="x">공유 비밀이 없어서 Handshake Secret부터 막힘</b>'],
+    S: ['★ server_write_key / iv <span class="dim">(내가 보낼 때)</span>', '★ client_write_key / iv <span class="dim">(브라우저가 보낸 걸 열 때)</span>'],
+    ct: 'TLS 1.3 key schedule (양쪽이 똑같이 실행)',
+    calc: ['Early Secret     = HKDF-Extract(0, 0)                         <span class="m">← 재접속(PSK) 아니면 고정값</span>',
+           'salt             = Derive-Secret(Early Secret, "derived", "")',
+           'Handshake Secret = HKDF-Extract(salt, <span class="p">공유 비밀 2</span>)          <span class="p">← ★ 여기서 공유 비밀 투입</span>',
+           's hs traffic     = Derive-Secret(Handshake Secret, "s hs traffic", <span class="b">H</span>)',
+           'c hs traffic     = Derive-Secret(Handshake Secret, "c hs traffic", <span class="b">H</span>)',
+           '<span class="r">server_write_key</span> = HKDF-Expand-Label(s hs traffic, "key", "", 16)   <span class="m">→ AES-128 키</span>',
+           '<span class="r">server_write_iv </span> = HKDF-Expand-Label(s hs traffic, "iv",  "", 12)',
+           '<span class="r">client_write_key / iv</span> = 같은 방식, c hs traffic에서'] },
+  { id: '4.7', who: ['C', 'S'], t: '정리 — 열쇠는 한 번도 선 위로 안 지나갔다',
+    d: '<b>브라우저와 서버는 같은 열쇠 4개(키·IV × 2방향)를 각자 만들어 가졌고, 도청자는 하나도 없습니다.</b> 다음 장면 5에서 서버는 <b>server_write_key</b>로 인증서를 잠그고, 브라우저는 <b>자기가 계산한 같은 키</b>로 엽니다.',
+    C: ['server_write_key/iv', 'client_write_key/iv'], W: ['8, 19, H', '<b class="x">열쇠 없음</b>'], S: ['server_write_key/iv', 'client_write_key/iv'],
+    ct: '장면 4 한 줄 요약',
+    calc: ['① 상대 공개값 ^ 내 비밀 → <span class="p">같은 숫자(공유 비밀)</span>',
+           '② 공유 비밀 + 대화 해시 → HKDF → <span class="r">같은 암호화 키</span>',
+           '③ 이 키로 장면 5부터 전부 암호화 <span class="m">(브라우저→서버 방향은 ⑧ Finished부터 사용)</span>'] },
+];
+const D5 = [
+  { id: '5.1', who: ['S'], t: '서버가 보낼 내용을 준비 (아직 평문, 서버 메모리 안)',
+    d: '<b>서버가</b> 메시지 두 개를 만듭니다. ③ EncryptedExtensions는 "어떤 방식으로 대화할지"의 나머지 합의, ④ Certificate는 "이 공개키는 api.example.com의 것"이라는 CA 보증서 묶음입니다.',
+    C: ['server_write_key/iv (4.6)'], W: ['(아직 아무것도 안 지나감)'], S: ['server_write_key/iv (4.6)', '★ ③ EncryptedExtensions', '★ ④ Certificate (체인 2장)'],
+    ct: '평문 내용 — 이게 잠길 대상',
+    calc: ['<span class="y">③ EncryptedExtensions</span>  <span class="m">(handshake 타입 8)</span>',
+           '     ALPN = "h2"                      <span class="m">← HTTP/2로 하자</span>',
+           '<span class="y">④ Certificate</span>          <span class="m">(handshake 타입 11)</span>',
+           '     [0] 서버 인증서   주인(SAN) = api.example.com · 서버 공개키 · 발급자 = 중간 CA',
+           '                       유효기간 2026-01-01 ~ 2026-12-31 · 중간 CA의 서명 ✍',
+           '     [1] 중간 CA 인증서 주인 = 중간 CA · 중간 CA 공개키 · 발급자 = 루트 CA · 루트 CA의 서명 ✍',
+           '<span class="m">     (루트 CA 인증서는 안 보냄 — 브라우저·OS에 이미 들어 있음)</span>',
+           '<span class="m">→ 합쳐서 약 2.8KB. ⚠ 개인키는 여기 없다 — 인증서는 공개 문서</span>'] },
+  { id: '5.2', who: ['S'], t: '상자에 넣기 — 진짜 종류는 안쪽에 숨긴다',
+    d: '<b>서버가</b> 내용 뒤에 "이건 handshake 메시지(22)"라는 표시를 붙여 하나로 묶습니다. 이 표시까지 <b>같이 암호화</b>되기 때문에, 바깥에서는 이게 인증서인지 HTTP 데이터인지 구분할 수 없습니다.',
+    C: [], W: [], S: ['★ inner = ③④ ‖ 22 ‖ 패딩'],
+    ct: 'TLSInnerPlaintext',
+    calc: ['inner = [ ③④ 내용 2,846바이트 ][ ContentType = <span class="y">22</span>(handshake) ][ 00 00 … 패딩(선택) ]',
+           '<span class="m">→ 바깥 헤더에는 진짜 종류 대신 항상 "23(application_data)"라고만 적힌다</span>'] },
+  { id: '5.3', who: ['S'], t: '이번 레코드 전용 nonce 만들기',
+    d: 'AES-GCM은 같은 키로 <b>같은 nonce를 두 번 쓰면 안전성이 깨집니다.</b> 그래서 <b>서버가</b> 4.6에서 만든 IV에 "몇 번째 레코드인지(seq)"를 XOR해서 레코드마다 다른 nonce를 씁니다. 브라우저도 seq를 세고 있어서 같은 nonce를 계산합니다.',
+    C: [], W: [], S: ['★ seq = 0', '★ nonce = iv XOR 0'],
+    ct: 'per-record nonce',
+    calc: ['server_write_iv = 3a 91 0c 44 b2 7f 18 e5 6d 09 5e 77',
+           'seq (12바이트)  = 00 00 00 00 00 00 00 00 00 00 00 00   <span class="m">← 이 키로 보내는 첫 레코드</span>',
+           'nonce           = 3a 91 0c 44 b2 7f 18 e5 6d 09 5e 77   <span class="m">← XOR 결과 (seq가 0이라 iv 그대로)</span>',
+           '<span class="m">다음 레코드(⑤ CertificateVerify)는 seq = 1 → 마지막 바이트가 76으로 바뀜</span>'] },
+  { id: '5.4', who: ['S'], t: 'AES-GCM으로 잠그기',
+    d: '<b>서버가</b> 키 + nonce로 inner를 암호화합니다. 결과는 <b>암호문(평문과 같은 길이)</b>과 <b>인증 태그 16바이트</b>. 태그는 "한 바이트라도 바뀌면 들통나는 봉인"입니다. 바깥 헤더는 암호화하지 않지만 <b>봉인 계산에는 포함(AAD)</b>돼서 헤더를 바꿔도 들통납니다.',
+    C: [], W: [], S: ['★ 암호문 2,847바이트', '★ 인증 태그 16바이트'],
+    ct: 'AES-128-GCM',
+    calc: ['입력  key   = <span class="r">server_write_key</span>   <span class="m">(4.6)</span>',
+           '      nonce = 3a 91 0c … 5e 77    <span class="m">(5.3)</span>',
+           '      평문  = inner                <span class="m">(5.2, 2,847바이트)</span>',
+           '      AAD   = 17 03 03 0b 2f        <span class="m">(바깥 헤더 — 안 숨기지만 봉인에 포함)</span>',
+           '출력  암호문 = <span class="p">9f 3a c1 7e 02 b8 44 … d0</span>   (2,847바이트)',
+           '      태그   = <span class="p">6b e2 0f … 19</span>                (16바이트)'] },
+  { id: '5.5', who: ['W'], t: '선 위로 전송 — 도청자에게 보이는 것',
+    d: '실제로 선을 지나가는 레코드입니다. <b>도청자가</b> 알 수 있는 건 맨 앞 5바이트 헤더(종류 23, 버전, 길이)뿐입니다. ALPN이 h2인지, <b>어느 사이트의 인증서인지</b>는 모릅니다.',
+    C: [], W: ['★ 헤더 17 03 03 0b 2f = "application_data, 2,863바이트"', '★ 🔒 9f 3a c1 7e … (해석 불가)', '<span class="dim">알 수 있는 것: 크기 · 시각</span>'], S: ['📤 전송'],
+    ct: 'TLSCiphertext (선 위의 실제 바이트)',
+    calc: ['[ 17 ][ 03 03 ][ 0b 2f ][ <span class="p">9f 3a c1 7e 02 b8 … (2,847바이트)</span> ][ <span class="p">태그 16바이트</span> ]',
+           '  ↑23    ↑버전     ↑길이 2,863',
+           '<span class="m">   (application_data)</span>',
+           '<span class="y">⚠ 다만 ① ClientHello의 SNI(api.example.com)는 평문이라 이미 보였다 — 이것까지 숨기는 게 ECH</span>'] },
+  { id: '5.6', who: ['C'], t: '브라우저가 열기 — 열쇠는 받은 게 아니라 이미 계산해 둔 것',
+    d: '<b>브라우저는</b> 4.6에서 <b>직접 계산한 같은 server_write_key·iv</b>를 갖고 있습니다. seq도 0으로 세고 있으니 같은 nonce를 만듭니다. 먼저 봉인(태그)을 확인하고, 맞을 때만 엽니다.',
+    C: ['★ nonce 재계산 (seq = 0)', '★ 태그 확인 ✅', '★ ③ ALPN = h2', '★ ④ 인증서 체인 2장 획득'], W: ['🔒 그대로 (못 엶)'], S: [],
+    ct: '브라우저의 복호화 순서',
+    calc: ['1. 같은 key · nonce · AAD(헤더)로 태그를 다시 계산',
+           '2. 받은 태그와 비교 → <span class="x">다르면 즉시 중단 (bad_record_mac 경고)</span>',
+           '3. <span class="r">같으면</span> 복호화 → inner',
+           '4. 끝의 00 패딩 제거 → 마지막 바이트 <span class="y">22</span> = handshake 메시지구나',
+           '5. ③④ 꺼냄 → 인증서는 장면 8(⑦ 검증)에서 루트 CA까지 확인'] },
+  { id: '5.7', who: ['C', 'S', 'W'], t: '정리 — TLS 1.2와 비교',
+    d: 'TLS 1.2는 이 시점에 <b>아직 키가 없어서</b> 인증서를 평문으로 보냈습니다. TLS 1.3은 키 계산(장면 4)을 <b>인증서보다 앞으로 당겨서</b> 인증서까지 잠글 수 있게 됐습니다.',
+    C: ['인증서 체인 (열어서 확인함)'], W: ['1.3: 🔒 암호문 + 길이', '1.2였다면: 인증서 평문 전체'], S: [],
+    ct: '장면 5 한 줄 요약',
+    calc: ['서버: ③④ 내용 → 상자(22 숨김) → nonce(iv XOR seq) → AES-GCM(<span class="r">server_write_key</span>) → 선 위로',
+           '브라우저: 같은 키(직접 계산) · 같은 nonce → 태그 확인 → 복호화 → 인증서 꺼냄',
+           '<span class="m">다음 장면 6: 같은 방식으로 잠긴 ⑤ CertificateVerify — 개인키 서명으로 "인증서 주인 = 지금 상대"를 증명</span>'] },
+];
+SC.A[3].detail = { name: '장면 4 · ECDHE로 같은 키 만들기', steps: D4 };
+SC.A[4].detail = { name: '장면 5 · ③④를 어떻게 잠그나', steps: D5 };
+
 // 장면마다 시각 효과
 function drawScene(s, t) {
   stage(s, t);
@@ -352,9 +539,11 @@ function knowHtml(side) {
 function renderUI() {
   const list = SC[mode], s = list[seg];
   $('cap').className = 'cap ' + (s.k || '');
-  $('cap').innerHTML = `<div class="step">장면 ${seg + 1} / ${list.length} · ${mode === 'A' ? 'TLS 1.3' : 'TLS 1.2 RSA'}</div><div class="title">${s.t}</div><div>${s.d}</div>`;
+  $('cap').innerHTML = `<div class="step">장면 ${seg + 1} / ${list.length} · ${mode === 'A' ? 'TLS 1.3' : 'TLS 1.2 RSA'}</div><div class="title">${s.t}</div><div>${s.d}</div>`
+    + (s.detail ? `<button class="dbtn" id="dbtn">🔍 자세히 보기 — ${s.detail.steps[0].id} ~ ${s.detail.steps.at(-1).id} 단계별 계산</button>` : '');
+  if (s.detail) $('dbtn').onclick = openDetail;
   $('kC').innerHTML = knowHtml('C'); $('kW').innerHTML = knowHtml('W'); $('kS').innerHTML = knowHtml('S');
-  $('script').innerHTML = list.map((x, i) => `<div class="s ${i === seg ? 'cur' : i < seg ? 'done' : ''}" data-i="${i}"><span class="n">${i + 1}</span><span>${x.t}</span></div>`).join('');
+  $('script').innerHTML = list.map((x, i) => `<div class="s ${i === seg ? 'cur' : i < seg ? 'done' : ''}" data-i="${i}"><span class="n">${i + 1}</span><span>${x.t}${x.detail ? ' <span class="vi">🔍 자세히</span>' : ''}</span></div>`).join('');
   document.querySelectorAll('.script .s').forEach(el => el.onclick = () => { setAuto(false); jump(+el.dataset.i); });
   rebuildTape();
 }
@@ -384,14 +573,45 @@ $('next').onclick = () => { setAuto(false); jump(seg + 1); };
 $('replay').onclick = () => { jump(0); setAuto(true); };
 $('play').onclick = () => setAuto(!auto);
 $('speed').oninput = e => speed = +e.target.value;
+// ───────── 자세히 보기 창 ─────────
+let MD = null, mi = 0;
+function openDetail() { const s = SC[mode][seg]; if (!s.detail) return; setAuto(false); MD = s.detail; mi = 0; $('modal').classList.add('on'); renderDetail(); }
+function closeDetail() { $('modal').classList.remove('on'); MD = null; }
+function renderDetail() {
+  const st = MD.steps[mi], items = a => a.length ? a.map(v => `<div class="it ${v.startsWith('★') ? 'new' : ''}">${v.replace(/^★\s*/, '')}</div>`).join('') : '<span class="dim">—</span>';
+  $('mKick').textContent = `${MD.name} · ${mi + 1} / ${MD.steps.length}`;
+  $('mTitle').textContent = `${st.id}  ${st.t}`;
+  $('mTabs').innerHTML = MD.steps.map((x, k) => `<button class="${k === mi ? 'on' : k < mi ? 'done' : ''}" data-k="${k}">${x.id}</button>`).join('');
+  document.querySelectorAll('#mTabs button').forEach(b => b.onclick = () => { mi = +b.dataset.k; renderDetail(); });
+  $('mDesc').innerHTML = st.d;
+  [['C', '🟢 브라우저'], ['W', '🔴 도청자'], ['S', '🔵 서버']].forEach(([k, n]) => {
+    const el = $('m' + k); el.classList.toggle('act', st.who.includes(k));
+    el.innerHTML = `<div class="t">${n}${st.who.includes(k) ? ' ← 지금 움직이는 쪽' : ''}</div>${items(st[k])}`;
+  });
+  $('mCalc').innerHTML = `<div class="ct">🧮 ${st.ct}</div>` + st.calc.map((l, k) => `<div class="cl" style="animation-delay:${.15 + k * .45}s">${l}</div>`).join('');
+  $('mPrev').disabled = mi === 0;
+  $('mNext').textContent = mi === MD.steps.length - 1 ? '닫고 장면으로 돌아가기 ✕' : '다음 단계 ▶';
+}
+$('mPrev').onclick = () => { if (mi > 0) { mi--; renderDetail(); } };
+$('mNext').onclick = () => { if (mi < MD.steps.length - 1) { mi++; renderDetail(); } else closeDetail(); };
+$('mClose').onclick = closeDetail;
+$('modal').onclick = e => { if (e.target.id === 'modal') closeDetail(); };
 document.addEventListener('keydown', e => {
+  if (MD) {
+    if (e.key === 'Escape') closeDetail();
+    if (e.key === 'ArrowRight' && mi < MD.steps.length - 1) { mi++; renderDetail(); }
+    if (e.key === 'ArrowLeft' && mi > 0) { mi--; renderDetail(); }
+    return;
+  }
   if (e.key === 'ArrowRight') { setAuto(false); jump(seg + 1); }
   if (e.key === 'ArrowLeft') { setAuto(false); jump(seg - 1); }
   if (e.key === ' ') { e.preventDefault(); setAuto(!auto); }
 });
-const h = location.hash.slice(1).match(/^([AB])(\d+)?$/);
+// 주소 예: #A4 = TLS 1.3 장면 4 · #A4d3 = 장면 4의 자세히 보기 3단계(4.3)
+const h = location.hash.slice(1).match(/^([AB])(\d+)?(?:d(\d+))?$/);
 if (h) { mode = h[1]; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x.dataset.m === mode)); if (h[2]) { auto = false; seg = Math.min(+h[2] - 1, SC[mode].length - 1); segT = DUR(SC[mode][seg]) * .55; } }
 setAuto(auto); renderUI();
+if (h && h[3] && SC[mode][seg].detail) { openDetail(); mi = Math.min(+h[3] - 1, MD.steps.length - 1); renderDetail(); }
 requestAnimationFrame(tick);
 </script>
 </body>
