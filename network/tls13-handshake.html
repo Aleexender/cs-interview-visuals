@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TLS 1.3 핸드셰이크 — 3D로 브라우저와 서버 사이를 오가는 것 보기</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2029; --line: #2c3540; --text: #e6e9ee; --dim: #8b95a3;
+    --ok: #3ecf8e; --no: #f2667a; --mid: #f5b84a; --blue: #5aa9ff; --violet: #b58cff; --cyan: #4fd1d9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--dim); margin-bottom: 22px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 14px; }
+  h2 .num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--blue); color: #0f1419; font-size: 14px; margin-right: 8px; }
+  code { background: #252d38; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  .dim { color: var(--dim); } .ok { color: var(--ok); } .no { color: var(--no); } .mid { color: var(--mid); } .vi { color: var(--violet); } .bl { color: var(--blue); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #141a21; font-size: 14px; }
+  .card.no { border-color: var(--no); } .card.ok { border-color: var(--ok); }
+  .card .t { font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .say { border-left: 4px solid var(--ok); background: #16291f; padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; font-size: 14px; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  button { font: inherit; padding: 9px 16px; border-radius: 99px; border: 2px solid var(--line); background: #141a21; color: var(--text); cursor: pointer; }
+  button.primary { border-color: var(--blue); background: #1b2a40; }
+  .modes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .modes button.on { border-color: var(--mid); background: #2a2416; }
+  .cap { border: 2px solid var(--blue); border-radius: 14px; background: #131d2a; padding: 12px 18px; margin-bottom: 12px; min-height: 112px; }
+  .cap .step { font-size: 13px; color: var(--blue); font-weight: 700; }
+  .cap .title { font-size: 20px; font-weight: 800; margin: 2px 0 4px; }
+  .cap.bad { border-color: var(--no); background: #2c1a1e; } .cap.bad .step { color: var(--no); }
+  .cap.good { border-color: var(--ok); background: #16291f; } .cap.good .step { color: var(--ok); }
+  .cap.key { border-color: var(--violet); background: #1d1730; } .cap.key .step { color: var(--violet); }
+  .viewport { position: relative; border: 2px solid var(--line); border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #18222e, #0b0f14 75%); }
+  canvas { display: block; width: 100%; height: 480px; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .hint { position: absolute; right: 12px; top: 10px; font-size: 12.5px; color: var(--dim); background: rgba(15,20,25,.7); padding: 3px 10px; border-radius: 99px; pointer-events: none; }
+  .legend { position: absolute; left: 12px; top: 10px; font-size: 12.5px; color: var(--dim); background: rgba(15,20,25,.75); padding: 6px 10px; border-radius: 10px; pointer-events: none; line-height: 1.7; }
+  .sq { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  .know { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .kb { border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #141a21; min-height: 150px; }
+  .kb .t { font-weight: 800; font-size: 13.5px; margin-bottom: 6px; }
+  .kb.c { border-color: #2a6b52; } .kb.c .t { color: var(--ok); }
+  .kb.w { border-color: #6b2a35; } .kb.w .t { color: var(--no); }
+  .kb.s { border-color: #2a4a6b; } .kb.s .t { color: var(--blue); }
+  .it { font-size: 13px; padding: 3px 8px; border-radius: 7px; background: #1e252f; margin: 3px 0; }
+  .it.new { background: #3a3016; box-shadow: 0 0 0 2px var(--mid); animation: pop .5s ease-out; }
+  .it.secret { color: var(--violet); }
+  .it.danger { color: var(--no); }
+  @keyframes pop { from { transform: scale(.85); } to { transform: none; } }
+  .ctrl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .ctrl label { font-size: 13px; color: var(--dim); display: flex; align-items: center; gap: 6px; margin-left: 6px; }
+  .script { display: grid; gap: 4px; margin-top: 12px; }
+  .script .s { display: grid; grid-template-columns: 28px 1fr; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer; border: 1px solid transparent; }
+  .script .s .n { width: 24px; height: 24px; border-radius: 50%; background: #252d38; text-align: center; line-height: 24px; font-size: 12px; font-weight: 700; }
+  .script .s.done { opacity: .5; }
+  .script .s.cur { background: #1b2a40; border-color: var(--blue); }
+  .script .s.cur .n { background: var(--blue); color: #0f1419; }
+  @media (prefers-reduced-motion: reduce) { .it.new { animation: none; } }
+  @media (max-width: 900px) { canvas { height: 380px; } .two, .know { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>TLS 1.3 핸드셰이크 — 3D로 브라우저와 서버 사이를 오가는 것 보기</h1>
+  <div class="sub">2026-10-26 HTTPS 점검 Q1 · TCP 연결 직후부터 <code>GET /orders</code>가 암호화돼 나가기까지. 가운데 아래 빨간 상자는 <b>선을 녹화 중인 도청자</b>입니다 — 선 위를 지나는 건 전부 그쪽에도 쌓입니다.</div>
+
+  <section>
+    <h2><span class="num">1</span>질문 · 내 답 · 판정</h2>
+    <div class="two">
+      <div class="card no"><div class="t">내 답변 (원문)</div>"일단 첫번째 클라이언트가 서버에게 요청을 보냄. 그러면 서버는 인증서 안에 공개키를 담아서 클라이언트에게 전달 그러면 클라이언트는 OS 브라우저가 인증서 를 CA 공개키로 검사함(서버는 애초에 서버인증서를 CA 인증 받음 CA는 개인키로 서명해서 서버 인증서를 전달해줌) 그러면 클라이언트는 프리마스터 시크릿으로 난수를 생성해서 서버에게 전달함.그럼 서버는 개인키로 복호화후 마스터 시크릿 을 생성함."
+        <div style="margin-top:8px" class="no">🟡 부분정답 (깊이 1) — 인증서·CA 서명은 ✅. 키 교환이 <b>TLS 1.2 RSA 방식</b>(1.3에서 제거됨). ClientHello 내용 · CertificateVerify · Finished 누락.</div></div>
+      <div class="card ok"><div class="t">핵심 차이 — 아래 두 버튼을 비교해 보세요</div>
+        <b>TLS 1.2 RSA</b>: 브라우저가 비밀(pre-master)을 <b>서버 공개키로 잠가서 선 위로 보낸다</b> → 도청자 녹화본에 그 잠긴 비밀이 남는다 → 2년 뒤 개인키를 훔치면 열린다.<br>
+        <b>TLS 1.3 ECDHE</b>: 양쪽이 <b>공개값(key_share)만 교환</b>하고 비밀은 <b>각자 계산</b> → 선 위로 비밀이 한 번도 지나가지 않는다 → 개인키를 훔쳐도 과거는 안전. 개인키는 <b>서명(CertificateVerify)</b>에만 쓴다.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span>3D 장면 — 패킷이 오가는 순서</h2>
+    <div class="modes">
+      <button data-m="A" class="on">TLS 1.3 (정답 흐름)</button>
+      <button data-m="B">TLS 1.2 RSA (내가 답한 방식)</button>
+    </div>
+    <div class="cap" id="cap"></div>
+    <div class="viewport">
+      <canvas id="cv"></canvas>
+      <div class="legend">
+        <span class="sq" style="background:#f5b84a"></span>평문 (도청자가 읽음) &nbsp;
+        <span class="sq" style="background:#b58cff"></span>🔒 암호화 (못 읽음)<br>
+        <span class="sq" style="background:#3ecf8e"></span>브라우저 &nbsp; <span class="sq" style="background:#5aa9ff"></span>서버 &nbsp; <span class="sq" style="background:#f2667a"></span>도청자(녹화)
+      </div>
+      <div class="hint">🖱 드래그해서 돌려 보기 · 더블클릭 = 원위치</div>
+    </div>
+    <div class="know">
+      <div class="kb c"><div class="t">🟢 브라우저가 가진 것</div><div id="kC"></div></div>
+      <div class="kb w"><div class="t">🔴 도청자 녹화본에 쌓인 것</div><div id="kW"></div></div>
+      <div class="kb s"><div class="t">🔵 서버가 가진 것</div><div id="kS"></div></div>
+    </div>
+    <div class="ctrl">
+      <button id="prev">◀ 이전 장면</button>
+      <button id="play" class="primary">⏸ 자동 넘김 끄기</button>
+      <button id="next">다음 장면 ▶</button>
+      <button id="replay">↺ 처음부터</button>
+      <label>속도 <input id="speed" type="range" min="0.4" max="2" step="0.1" value="1"></label>
+    </div>
+    <div class="script" id="script"></div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span>단계 정리 (TLS 1.3)</h2>
+    <table>
+      <tr><th>#</th><th>누가</th><th>무엇을</th><th>왜</th></tr>
+      <tr><td>①</td><td>브라우저</td><td><b>ClientHello</b> — random, 지원 버전·암호 스위트, <b>key_share</b>(임시 DH 공개값), SNI, ALPN</td><td>key_share를 처음부터 보내서 왕복 1번(1-RTT). SNI로 어느 인증서를 줄지 알림</td></tr>
+      <tr><td>②</td><td>서버</td><td><b>ServerHello</b> — random, 고른 스위트, <b>자기 key_share</b></td><td>공개값이 모였으니 <b>양쪽이 각자 같은 공유 비밀 계산</b>(ECDHE). 비밀은 전송 안 됨</td></tr>
+      <tr><td>—</td><td>양쪽</td><td>공유 비밀 → <b>핸드셰이크 키</b></td><td>이후는 인증서까지 전부 암호화</td></tr>
+      <tr><td>③④</td><td>서버</td><td>{EncryptedExtensions} {<b>Certificate</b>} 서버+중간 CA 인증서</td><td>"이 공개키는 api.example.com의 것" — CA 보증서</td></tr>
+      <tr><td>⑤</td><td>서버</td><td>{<b>CertificateVerify</b>} 대화 전체에 <b>개인키로 서명</b></td><td>인증서는 누구나 복사 가능. <b>개인키 소유</b>를 증명 → 중간자 차단</td></tr>
+      <tr><td>⑥</td><td>서버</td><td>{<b>Finished</b>} 대화 전체의 MAC</td><td>①②가 바꿔치기(다운그레이드)되지 않았음을 확인</td></tr>
+      <tr><td>⑦</td><td>브라우저</td><td><b>검증</b>: 루트 CA까지 체인 · 도메인(SAN) · 유효기간·폐기 · CertificateVerify · Finished</td><td>하나라도 실패하면 중단</td></tr>
+      <tr><td>⑧</td><td>브라우저</td><td>{<b>Finished</b>}</td><td>브라우저 쪽 대화도 같다는 확인</td></tr>
+      <tr><td>⑨</td><td>브라우저</td><td>[<b>GET /orders</b>] 애플리케이션 키 + AEAD</td><td>이후 데이터는 빠른 대칭 암호 + 변조 검출</td></tr>
+    </table>
+    <div class="say">면접용: <b>"브라우저가 ClientHello에 지원 스위트와 임시 DH 공개값(key_share)을 담아 보내고, 서버가 ServerHello로 자기 key_share를 보내면 양쪽이 ECDHE로 같은 공유 비밀을 각자 계산합니다. 이후 암호화된 채로 서버가 인증서 체인, 개인키로 대화 전체에 서명한 CertificateVerify, Finished를 보내고, 브라우저는 루트 CA까지 체인과 도메인·유효기간·서명·Finished를 검증한 뒤 자신의 Finished를 보냅니다. 왕복은 1번이고, 임시 키를 버리므로 나중에 개인키가 털려도 과거 대화는 안전합니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
+      <a style="color:var(--blue)" href="https://datatracker.ietf.org/doc/html/rfc8446">RFC 8446 — TLS 1.3</a>
+      (Figure 1 <i>"Message Flow for Full TLS Handshake"</i> · <i>"CertificateVerify: A signature over the entire handshake using the private key corresponding to the public key in the Certificate message."</i> · <i>"Static RSA and Diffie-Hellman cipher suites have been removed; all public-key based key exchange mechanisms now provide forward secrecy."</i>)</p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const MOTION = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const ease = t => t <= 0 ? 0 : t >= 1 ? 1 : t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const seg01 = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+let NOW = 0;
+
+// ───────── 작은 3D 엔진 (캔버스 · 원근 투영 · 화가 알고리즘) ─────────
+function Engine(cv, cfg) {
+  const ctx = cv.getContext('2d');
+  const S = { yaw: cfg.yaw, pitch: cfg.pitch, W: 0, H: 0 };
+  let faces = [], over = [];
+  const rgba = (c, a, s = 1) => `rgba(${c.map(v => Math.round(Math.min(255, v * s))).join(',')},${a})`;
+  function resize() { const d = devicePixelRatio || 1; S.W = cv.clientWidth; S.H = cv.clientHeight; cv.width = S.W * d; cv.height = S.H * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  function proj([x, y, z]) {
+    x -= cfg.center;
+    const cy = Math.cos(S.yaw), sy = Math.sin(S.yaw), cp = Math.cos(S.pitch), sp = Math.sin(S.pitch);
+    const x1 = x * cy - y * sy, y1 = x * sy + y * cy, y2 = y1 * cp - z * sp, z2 = y1 * sp + z * cp;
+    const D = 38, f = Math.min(S.W * 1.5, S.H * 3.3) * cfg.zoom, k = f / (D + y2);
+    return { x: S.W / 2 + x1 * k, y: S.H * cfg.horizon - z2 * k, d: y2, s: D / (D + y2) };
+  }
+  function box(c, s, col, o = {}) {
+    const sc = o.scale ?? 1; if (sc <= 0.01) return;
+    const [cx, cy, cz] = c, [sx, sy, sz] = s.map(v => v * sc / 2);
+    const v = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(([a, b, e]) => [cx + a * sx, cy + b * sy, cz + e * sz]);
+    [[0,1,2,3,.45],[4,5,6,7,1],[0,1,5,4,.8],[3,2,6,7,.6],[0,3,7,4,.68],[1,2,6,5,.72]].forEach(f => {
+      const pts = f.slice(0, 4).map(i => v[i]);
+      faces.push({ pts, shade: f[4], col, o, d: pts.reduce((a, p) => a + proj(p).d, 0) / 4 });
+    });
+  }
+  function poly(pts) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); }
+  function label(pos, text, color, sub, a = 1) {
+    over.push(() => {
+      const p = proj(pos); ctx.globalAlpha = a;
+      ctx.font = '700 13px -apple-system, "Apple SD Gothic Neo", sans-serif';
+      const w1 = ctx.measureText(text).width; ctx.font = '500 11.5px -apple-system, sans-serif';
+      const w = Math.max(w1, sub ? ctx.measureText(sub).width : 0) + 18, h = sub ? 38 : 22;
+      ctx.fillStyle = 'rgba(13,17,22,.9)'; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(p.x - w / 2, p.y - h, w, h, 8); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.font = '700 13px -apple-system, "Apple SD Gothic Neo", sans-serif'; ctx.fillStyle = color; ctx.fillText(text, p.x, p.y - h + 15);
+      if (sub) { ctx.font = '500 11.5px -apple-system, sans-serif'; ctx.fillStyle = '#c3cbd5'; ctx.fillText(sub, p.x, p.y - 7); }
+      ctx.globalAlpha = 1;
+    });
+  }
+  function emoji(pos, ch, size = 24, a = 1) { over.push(() => { const p = proj(pos); ctx.globalAlpha = a; ctx.font = `${size * p.s * 1.1}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, p.x, p.y); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; }); }
+  function line(a, b, col, w = 3, dashed = false, alpha = .9) {
+    over.push(() => { const p = proj(a), q = proj(b); ctx.strokeStyle = rgba(col, alpha); ctx.lineWidth = w; if (dashed) ctx.setLineDash([7, 6]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke(); ctx.setLineDash([]); });
+  }
+  function burst(pos, p, col = [242, 102, 122]) {
+    over.push(() => {
+      const c = proj(pos), r = (25 + 70 * ease(Math.min(p * 1.6, 1))) * c.s * 1.1;
+      const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+      g.addColorStop(0, 'rgba(255,240,200,.85)'); g.addColorStop(.35, rgba(col, .7)); g.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 7); ctx.fill();
+    });
+  }
+  function grid() {
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(80,100,120,.16)';
+    for (let x = -13; x <= 13; x += 1.5) { const a = proj([x, -6, 0]), b = proj([x, 7.5, 0]); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+    for (let y = -6; y <= 7.5; y += 1.5) { const a = proj([-13, y, 0]), b = proj([13, y, 0]); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  }
+  function frame(fn, shake = 0) {
+    ctx.clearRect(0, 0, S.W, S.H); faces = []; over = [];
+    ctx.save(); if (shake) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
+    grid(); fn();
+    faces.sort((a, b) => b.d - a.d);
+    for (const f of faces) {
+      const a = f.o.alpha ?? .9, la = f.o.lineA ?? 1;
+      poly(f.pts.map(proj)); ctx.fillStyle = rgba(f.col, a, f.shade * (f.o.glow ? 1.25 : .78)); ctx.fill();
+      ctx.strokeStyle = rgba(f.col, .95 * la); ctx.lineWidth = 1.3; if (f.o.dashed) ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    over.forEach(f => f()); ctx.restore();
+  }
+  let drag = null;
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw: S.yaw, pitch: S.pitch }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => { if (!drag) return; S.yaw = drag.yaw + (e.clientX - drag.x) * .006; S.pitch = Math.max(.15, Math.min(1.3, drag.pitch + (e.clientY - drag.y) * .005)); });
+  cv.addEventListener('pointerup', () => drag = null);
+  cv.addEventListener('dblclick', () => { S.yaw = cfg.yaw; S.pitch = cfg.pitch; });
+  addEventListener('resize', resize); resize();
+  return { box, label, emoji, line, burst, frame };
+}
+
+// ───────── 무대 ─────────
+const E = Engine($('cv'), { yaw: -0.12, pitch: 0.78, center: 0, zoom: .8, horizon: .52 });
+const COL = { C: [62, 207, 142], S: [90, 169, 255], W: [242, 102, 122], plain: [245, 184, 74], enc: [181, 140, 255], key: [181, 140, 255] };
+const PC = [-8.5, 0, 1], PS = [8.5, 0, 1], PW = [0, -4.4, .7], TAPE = [2.4, -4.4];   // 도청자는 앞쪽(카메라 쪽), 녹화본 더미는 그 오른쪽
+const OUT = { C: [-6.8, 0, 1.1], S: [6.8, 0, 1.1] };
+
+// 녹화본: 지금까지 선을 지난 패킷 (모드 · 장면마다 누적)
+let tape = [];
+function stage(s, t) {
+  // 선 (케이블)
+  E.box([0, 0, .25], [13.6, .35, .35], [120, 135, 150], { alpha: .55 });
+  E.label([-3.6, 1.3, .1], 'TCP 연결 (인터넷)', '#8b95a3');
+  // 도청 탭
+  E.line([0, 0, .3], [PW[0], PW[1] + .9, PW[2]], COL.W, 2, true, .6);
+  // 브라우저 · 서버 · 도청자
+  E.box(PC, [3, 2.6, 2], COL.C, { alpha: .9, glow: s.glowC && Math.sin(NOW / 150) > 0 });
+  E.label([PC[0], 0, 2.9], '🌐 브라우저', '#3ecf8e', s.subC || '');
+  E.box(PS, [3, 2.6, 2], COL.S, { alpha: .9, glow: s.glowS && Math.sin(NOW / 150) > 0 });
+  E.label([PS[0], 0, 2.9], '🖥 서버 (api.example.com)', '#5aa9ff', s.subS || '');
+  E.box(PW, [2.4, 1.8, 1.4], COL.W, { alpha: .75 });
+  E.label([PW[0], PW[1], 2.3], '🎥 도청자 — 선을 전부 녹화', '#f2667a', `녹화된 패킷 ${tape.length + (s.pkt && t > .5 ? 1 : 0)}개`);
+  // 녹화본 더미
+  const all = tape.concat(s.pkt && t > .5 ? [s.pkt.enc] : []);
+  all.forEach((enc, k) => E.box([TAPE[0] + (k % 4) * .6, TAPE[1] + Math.floor(k / 8) * .6, .15 + Math.floor((k % 8) / 4) * .32], [.5, .5, .28], enc === 'broken' ? COL.W : enc ? COL.enc : COL.plain, { alpha: .95 }));
+}
+// 패킷 한 개가 날아감
+function packet(p, t) {
+  const from = OUT[p.from], to = OUT[p.from === 'C' ? 'S' : 'C'];
+  const q = ease(seg01(t, 0, .85)), pos = lerp(from, to, q); pos[2] += Math.sin(Math.PI * q) * 2.2;
+  E.box(pos, [1.5, 1.05, .8], p.enc ? COL.enc : COL.plain, { alpha: .95 });
+  if (p.enc) E.emoji([pos[0], pos[1] - .7, pos[2] + .2], '🔒', 22);
+  E.label([pos[0], pos[1], pos[2] + .95], p.name, p.enc ? '#d6c2ff' : '#ffd48a', p.sub);
+  // 도청 탭으로 사본이 내려감
+  if (q > .45 && q < .75) { const r = seg01(q, .45, .75), cp = lerp([0, 0, .5], [PW[0], PW[1], 1.3], r); E.box(cp, [.6, .45, .35], p.enc ? COL.enc : COL.plain, { alpha: .8 * (1 - r) + .2 }); }
+}
+
+// ───────── 장면 ─────────
+const SC = {
+  A: [
+    { t: '출발: TCP 연결만 된 상태', d: 'TCP 3-way handshake가 끝났습니다. 아직 아무 비밀도 없어서, 지금부터 선 위를 지나는 건 <b>도청자가 전부 녹화</b>합니다.',
+      know: { C: ['서버 주소 api.example.com'], W: [], S: ['서버 개인키 🔑 (디스크에 보관)', '서버 인증서 (CA 서명됨)'] } },
+    { t: '① 브라우저 → ClientHello (평문)', d: '<b>브라우저가</b> 지원 버전·암호 스위트, <b>key_share(브라우저의 임시 DH 공개값 a·G)</b>, SNI, random을 보냅니다. 비밀 a는 <b>브라우저 안에만</b> 있고 보내지 않아요.',
+      pkt: { from: 'C', name: '① ClientHello', sub: 'key_share(aG) · SNI · 스위트', enc: 0 },
+      know: { C: ['임시 비밀 a (절대 안 보냄)'], W: ['ClientHello: aG(공개값) · SNI · 스위트'], S: ['브라우저의 공개값 aG'] } },
+    { t: '② 서버 → ServerHello (평문)', d: '<b>서버가</b> 스위트를 고르고 <b>자기 key_share(서버의 임시 DH 공개값 b·G)</b>를 보냅니다. 서버의 비밀 b도 서버 안에만 있어요.',
+      pkt: { from: 'S', name: '② ServerHello', sub: 'key_share(bG) · 고른 스위트', enc: 0 },
+      know: { C: ['서버의 공개값 bG'], W: ['ServerHello: bG(공개값)'], S: ['임시 비밀 b (절대 안 보냄)'] } },
+    { t: '양쪽이 각자 같은 공유 비밀을 계산 (ECDHE) — 선 위로는 아무것도 안 감', d: '<b>브라우저</b>: a × (bG) / <b>서버</b>: b × (aG) → <b>같은 값 abG</b>. 도청자는 aG와 bG만 가지고 있어서 abG를 계산할 수 없습니다(이산로그 문제). 여기서 <b>핸드셰이크 키</b>가 만들어지고, 이후는 전부 암호화됩니다.',
+      k: 'key', glowC: 1, glowS: 1, keys: 1,
+      know: { C: ['🔐 공유 비밀 abG → 핸드셰이크 키'], W: ['(새로 얻은 것 없음 — 비밀은 선 위로 안 지나감)'], S: ['🔐 공유 비밀 abG → 핸드셰이크 키'] } },
+    { t: '③④ 서버 → {EncryptedExtensions} {Certificate} (암호화)', d: '<b>서버가</b> 인증서 체인(서버 인증서 + 중간 CA)을 보냅니다. TLS 1.3에서는 <b>인증서도 암호화</b>돼서 도청자는 보라색(🔒) 덩어리만 녹화합니다.',
+      pkt: { from: 'S', name: '③④ Certificate', sub: '서버 인증서 + 중간 CA', enc: 1 },
+      know: { C: ['서버 인증서 체인 (공개키 포함)'], W: ['🔒 암호문 (못 읽음)'], S: [] } },
+    { t: '⑤ 서버 → {CertificateVerify}: 개인키로 "대화 전체"에 서명', d: '<b>서버가</b> 지금까지의 대화(①~④) 전체를 <b>개인키로 서명</b>해 보냅니다. 인증서는 누구나 복사할 수 있지만 이 서명은 <b>개인키를 가진 진짜 주인만</b> 만들 수 있어요. TLS 1.3에서 개인키가 하는 일은 <b>이것 하나</b>입니다.',
+      pkt: { from: 'S', name: '⑤ CertificateVerify', sub: '대화 전체에 개인키 서명 🖋', enc: 1 }, glowS: 1, sign: 1,
+      know: { C: ['서버의 서명 (대화 전체)'], W: ['🔒 암호문'], S: [] } },
+    { t: '⑥ 서버 → {Finished}', d: '<b>서버가</b> 대화 전체의 MAC(지문)을 보냅니다. 누가 중간에 ①②를 바꿔치기(예: 약한 스위트로 다운그레이드)했다면 여기서 값이 안 맞습니다.',
+      pkt: { from: 'S', name: '⑥ Finished', sub: '대화 전체의 MAC', enc: 1 },
+      know: { C: ['서버 Finished'], W: ['🔒 암호문'], S: [] } },
+    { t: '⑦ 브라우저가 검증 — 하나라도 실패하면 연결 중단', d: '<b>브라우저가</b> 순서대로 확인합니다: ① 서버 인증서 → 중간 CA → <b>루트 CA</b>(OS/브라우저 신뢰 저장소)까지 서명 체인 ② 도메인(SAN)이 api.example.com과 일치 ③ 유효기간·폐기 ④ <b>CertificateVerify 서명</b>을 인증서 공개키로 검증 ⑤ Finished MAC.',
+      k: 'good', glowC: 1, checks: 1,
+      know: { C: ['✅ 상대가 진짜 api.example.com임을 확인'], W: [], S: [] } },
+    { t: '⑧ 브라우저 → {Finished}', d: '<b>브라우저도</b> 자기가 본 대화의 MAC을 보냅니다. 서버가 확인하면 핸드셰이크 완료. 공유 비밀에서 <b>애플리케이션 키</b>를 만듭니다.',
+      pkt: { from: 'C', name: '⑧ Finished', sub: '대화 전체의 MAC', enc: 1 },
+      know: { C: ['🔐 애플리케이션 키'], W: ['🔒 암호문'], S: ['🔐 애플리케이션 키'] } },
+    { t: '⑨ 브라우저 → [GET /orders] (대칭키 · AEAD)', d: '드디어 HTTP 요청. <b>애플리케이션 키로 대칭 암호화</b>(AES-GCM 등 AEAD — 암호화와 변조 검출을 한 번에). 핸드셰이크 왕복은 <b>1번(1-RTT)</b>이었습니다.',
+      k: 'good', pkt: { from: 'C', name: '⑨ GET /orders', sub: '애플리케이션 키 + AEAD', enc: 1 },
+      know: { C: [], W: ['🔒 암호문 (요청 본문)'], S: ['GET /orders 복호화 ✅'] } },
+    { t: '2년 뒤: 도청자가 서버 개인키를 훔쳤다면?', d: '녹화본에 있는 건 <b>공개값 aG, bG</b>와 암호문뿐. 개인키는 <b>서명용</b>이었지 키를 잠그는 데 쓰이지 않았고, 임시 비밀 a·b는 <b>이미 버려졌습니다.</b> → 공유 비밀을 복원할 재료가 없어 <b>과거 대화는 안전</b>합니다. 이것이 <b>전방향 안전성(forward secrecy)</b>.',
+      k: 'good', steal: 1,
+      know: { C: ['(임시 비밀 a 폐기됨)'], W: ['서버 개인키 🔑 (탈취)', '→ aG·bG만으론 abG 계산 불가 ❌'], S: ['(임시 비밀 b 폐기됨)'] } },
+  ],
+  B: [
+    { t: '출발: TCP 연결만 된 상태', d: '이번엔 <b>내가 답한 방식 = TLS 1.2의 RSA 키 교환</b>입니다. TLS 1.3에서는 제거됐어요.',
+      know: { C: ['서버 주소 api.example.com'], W: [], S: ['서버 개인키 🔑', '서버 인증서'] } },
+    { t: '① 브라우저 → ClientHello (평문)', d: '<b>브라우저가</b> 지원 스위트와 random을 보냅니다. 이 방식엔 key_share가 없습니다.',
+      pkt: { from: 'C', name: '① ClientHello', sub: '스위트 · random', enc: 0 },
+      know: { C: [], W: ['ClientHello'], S: [] } },
+    { t: '② 서버 → ServerHello + Certificate (평문)', d: '<b>서버가</b> 인증서를 <b>평문으로</b> 보냅니다(1.2). 도청자는 어느 사이트의 인증서인지까지 다 봅니다.',
+      pkt: { from: 'S', name: '② ServerHello + Cert', sub: '인증서(공개키) — 평문', enc: 0 },
+      know: { C: ['서버 공개키'], W: ['서버 인증서 (평문)'], S: [] } },
+    { t: '③ 브라우저 → pre-master secret을 "서버 공개키로 잠가서" 전송', d: '<b>브라우저가</b> 난수(pre-master secret)를 만들어 <b>서버 공개키로 암호화</b>해 보냅니다. 문제는 이 <b>잠긴 비밀 자체가 선 위를 지나간다</b>는 것 — 도청자 녹화본에 그대로 남습니다.',
+      k: 'bad', pkt: { from: 'C', name: '③ ClientKeyExchange', sub: 'pre-master (서버 공개키로 잠금)', enc: 1 },
+      know: { C: ['pre-master secret'], W: ['🔒 잠긴 pre-master ⚠️ (열쇠만 있으면 열림)'], S: ['개인키로 복호화 → pre-master'] } },
+    { t: '양쪽이 master secret → 세션 키 계산', d: 'pre-master + random들로 master secret을 만들고, 거기서 세션 키를 만듭니다.',
+      k: 'key', glowC: 1, glowS: 1, keys: 1,
+      know: { C: ['🔐 master secret → 세션 키'], W: [], S: ['🔐 master secret → 세션 키'] } },
+    { t: '④ [GET /orders] (세션 키로 암호화)', d: '요청은 암호화됐습니다. 지금 당장은 도청자가 읽을 수 없습니다.',
+      pkt: { from: 'C', name: '④ GET /orders', sub: '세션 키로 암호화', enc: 1 },
+      know: { C: [], W: ['🔒 암호문 (요청 본문)'], S: ['GET /orders ✅'] } },
+    { t: '2년 뒤: 서버 개인키 탈취 → 녹화본이 전부 열린다', d: '① 개인키로 녹화본의 <b>잠긴 pre-master를 복호화</b> → ② random들(평문으로 녹화됨)과 합쳐 <b>master secret 계산</b> → ③ 세션 키 복원 → ④ 2년 전 대화 <b>전부 복호화</b>. 개인키 하나가 <b>과거 모든 세션의 열쇠</b>였던 것. 그래서 TLS 1.3은 이 방식을 없앴습니다.',
+      k: 'bad', steal: 1, broken: 1,
+      know: { C: [], W: ['서버 개인키 🔑 (탈취)', '→ pre-master 복호화', '→ master secret → 세션 키', '→ 2년 전 GET /orders 평문 😱'], S: [] } },
+  ],
+};
+
+// 장면마다 시각 효과
+function drawScene(s, t) {
+  stage(s, t);
+  if (s.pkt) packet(s.pkt, t);
+  if (s.keys) {
+    const b = .15 * Math.sin(NOW / 250);
+    E.emoji([PC[0], -1.8, 2.4 + b], '🔐', 34); E.emoji([PS[0], -1.8, 2.4 + b], '🔐', 34);
+    if (mode === 'A') { E.label([0, 1.6, 3.6], 'a×(bG) = b×(aG) = abG', '#d6c2ff', '각자 계산 — 비밀은 선을 안 지나감'); E.emoji([0, 0, 1.4 + b], '🚫', 28); }
+    else E.label([0, 1.6, 3.6], 'pre-master + random → master secret', '#d6c2ff', '이미 선 위로 한 번 지나간 재료로 계산');
+  }
+  if (s.sign) E.emoji([PS[0] - 1.9, -1.6, 2.2 + .15 * Math.sin(NOW / 200)], '🖋', 30);
+  if (s.checks) {
+    const items = ['① 루트 CA까지 체인', '② 도메인(SAN) 일치', '③ 유효기간·폐기', '④ CertificateVerify 서명', '⑤ Finished MAC'];
+    items.forEach((x, k) => { if (t > k * .16) E.label([PC[0] + 4.4, 1.2, 4.0 - k * .7], '✅ ' + x, '#3ecf8e'); });
+  }
+  if (s.steal) {
+    const q = ease(seg01(t, 0, .45)), p = lerp([PS[0], 0, 2.4], [PW[0] + 1.4, PW[1], 2.0], q); p[2] += Math.sin(Math.PI * q) * 2;
+    E.emoji(p, '🔑', 34);
+    E.emoji([PW[0] - 1.6, PW[1], 2.0], '🦹', 34);
+    const tp = [TAPE[0] + .9, TAPE[1], .6];
+    if (t > .5) {
+      if (s.broken) { E.burst(tp, seg01(t, .5, 1)); E.label([tp[0] + 2.6, tp[1], 2.2], '🔓 녹화본 전부 복호화', '#f2667a', 'pre-master → master → 세션 키'); }
+      else E.label([tp[0] + 2.6, tp[1], 2.2], '❌ 열 수 없음', '#3ecf8e', '녹화본엔 공개값 aG·bG뿐');
+    }
+  }
+}
+
+// ───────── 진행 (자동 넘김 / 수동 반복) ─────────
+let mode = 'A', seg = 0, segT = 0, auto = MOTION, speed = 1, last = 0, hold = 0;
+const DUR = s => s.pkt ? 3200 : s.checks ? 4200 : 3600;
+function rebuildTape() { tape = SC[mode].slice(0, seg).filter(x => x.pkt).map(x => x.pkt.enc); if (SC[mode][seg].broken) tape = tape.map(() => 'broken'); }
+function knowHtml(side) {
+  const out = [];
+  SC[mode].slice(0, seg + 1).forEach((x, k) => (x.know[side] || []).forEach(v => out.push({ v, isNew: k === seg })));
+  return out.length ? out.map(o => `<div class="it ${o.isNew ? 'new' : ''} ${/🔐|비밀/.test(o.v) ? 'secret' : ''} ${/탈취|😱|⚠️/.test(o.v) ? 'danger' : ''}">${o.v}</div>`).join('') : '<span class="dim">—</span>';
+}
+function renderUI() {
+  const list = SC[mode], s = list[seg];
+  $('cap').className = 'cap ' + (s.k || '');
+  $('cap').innerHTML = `<div class="step">장면 ${seg + 1} / ${list.length} · ${mode === 'A' ? 'TLS 1.3' : 'TLS 1.2 RSA'}</div><div class="title">${s.t}</div><div>${s.d}</div>`;
+  $('kC').innerHTML = knowHtml('C'); $('kW').innerHTML = knowHtml('W'); $('kS').innerHTML = knowHtml('S');
+  $('script').innerHTML = list.map((x, i) => `<div class="s ${i === seg ? 'cur' : i < seg ? 'done' : ''}" data-i="${i}"><span class="n">${i + 1}</span><span>${x.t}</span></div>`).join('');
+  document.querySelectorAll('.script .s').forEach(el => el.onclick = () => { setAuto(false); jump(+el.dataset.i); });
+  rebuildTape();
+}
+function tick(now) {
+  NOW = now;
+  const dt = last ? Math.min(now - last, 60) : 0; last = now;
+  const list = SC[mode], s = list[seg], D = DUR(s);
+  if (!MOTION) segT = D;
+  else if (auto) {
+    segT += dt * speed;
+    if (segT >= D) {
+      if (seg < list.length - 1) { seg++; segT = 0; renderUI(); }
+      else { hold += dt; segT = D; if (hold > 2000) { seg = 0; segT = 0; hold = 0; renderUI(); } }
+    }
+  } else { segT += dt * speed; if (segT >= D + 1000) segT = 0; }
+  const t = Math.min(segT / DUR(SC[mode][seg]), 1);
+  E.frame(() => drawScene(SC[mode][seg], t), SC[mode][seg].broken && t > .5 ? Math.max(0, 1 - (t - .5) * 4) * 6 : 0);
+  requestAnimationFrame(tick);
+}
+function jump(i) { seg = Math.max(0, Math.min(i, SC[mode].length - 1)); segT = 0; hold = 0; renderUI(); }
+function setAuto(a) { auto = a; $('play').textContent = a ? '⏸ 자동 넘김 끄기' : '▶ 자동 넘김 켜기'; }
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x === b)); jump(0);
+});
+$('prev').onclick = () => { setAuto(false); jump(seg - 1); };
+$('next').onclick = () => { setAuto(false); jump(seg + 1); };
+$('replay').onclick = () => { jump(0); setAuto(true); };
+$('play').onclick = () => setAuto(!auto);
+$('speed').oninput = e => speed = +e.target.value;
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') { setAuto(false); jump(seg + 1); }
+  if (e.key === 'ArrowLeft') { setAuto(false); jump(seg - 1); }
+  if (e.key === ' ') { e.preventDefault(); setAuto(!auto); }
+});
+const h = location.hash.slice(1).match(/^([AB])(\d+)?$/);
+if (h) { mode = h[1]; document.querySelectorAll('.modes button').forEach(x => x.classList.toggle('on', x.dataset.m === mode)); if (h[2]) { auto = false; seg = Math.min(+h[2] - 1, SC[mode].length - 1); segT = DUR(SC[mode][seg]) * .55; } }
+setAuto(auto); renderUI();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
