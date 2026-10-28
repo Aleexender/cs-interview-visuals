@@ -156,10 +156,10 @@
       <tr><td>①</td><td>브라우저</td><td><b>ClientHello</b> — random, 지원 버전·암호 스위트, <b>key_share</b>(임시 DH 공개값), SNI, ALPN</td><td>key_share를 처음부터 보내서 왕복 1번(1-RTT). SNI로 어느 인증서를 줄지 알림</td><td><span class="cb none">평문</span> <span class="cb asym">key_share = 비대칭 계열 공개값</span></td></tr>
       <tr><td>②</td><td>서버</td><td><b>ServerHello</b> — random, 고른 스위트, <b>자기 key_share</b></td><td>공개값이 모였으니 <b>양쪽이 각자 같은 공유 비밀 계산</b>(ECDHE). 비밀은 전송 안 됨</td><td><span class="cb none">평문</span> <span class="cb asym">key_share = 비대칭 계열 공개값</span></td></tr>
       <tr><td>—</td><td>양쪽</td><td>공유 비밀 → <b>핸드셰이크 키</b></td><td>이후는 인증서까지 전부 암호화</td><td><span class="cb asym">ECDHE(비대칭 계열)로</span> → <span class="cb sym">대칭키를 만들어 냄</span></td></tr>
-      <tr><td>③④</td><td>서버</td><td>{EncryptedExtensions} {<b>Certificate</b>} 서버+중간 CA 인증서</td><td>"이 공개키는 api.example.com의 것" — CA 보증서</td><td><span class="cb sym">대칭키 암호화 (server 핸드셰이크 키 · AES-GCM)</span></td></tr>
+      <tr><td>③④</td><td>서버</td><td>{EncryptedExtensions} {<b>Certificate</b>} <b>서버 인증서 + 중간 CA 인증서(사본)</b></td><td>"이 공개키는 api.example.com의 것" — CA 보증서. 중간 CA 인증서는 <b>발급받을 때 CA에게서 같이 받은 공개 문서</b>라 서버가 대신 전달 (중간 CA의 개인키는 서버에 없음)</td><td><span class="cb sym">대칭키 암호화 (server 핸드셰이크 키 · AES-GCM)</span></td></tr>
       <tr><td>⑤</td><td>서버</td><td>{<b>CertificateVerify</b>} 대화 전체에 <b>개인키로 서명</b></td><td>인증서는 누구나 복사 가능. <b>개인키 소유</b>를 증명 → 중간자 차단</td><td><span class="cb sym">운반: 대칭키 암호화</span> <span class="cb asym">내용: 비대칭 서명 (서버 개인키)</span></td></tr>
       <tr><td>⑥</td><td>서버</td><td>{<b>Finished</b>} 대화 전체의 MAC</td><td>①②가 바꿔치기(다운그레이드)되지 않았음을 확인</td><td><span class="cb sym">운반: 대칭키 암호화</span> <span class="cb sym">내용: MAC (대칭 · HMAC)</span></td></tr>
-      <tr><td>⑦</td><td>브라우저</td><td><b>검증</b>: 루트 CA까지 체인 · 도메인(SAN) · 유효기간·폐기 · CertificateVerify · Finished</td><td>하나라도 실패하면 중단</td><td><span class="cb asym">체인·⑤ 서명 확인: 공개키 (비대칭)</span> <span class="cb sym">⑥ 확인: MAC (대칭)</span></td></tr>
+      <tr><td>⑦</td><td>브라우저</td><td><b>검증</b>: 서버 인증서 → 중간 CA 인증서 → 루트 CA까지 체인 · 도메인(SAN) · 유효기간·폐기 · CertificateVerify · Finished</td><td>하나라도 실패하면 중단</td><td><span class="cb asym">체인·⑤ 서명 확인: 공개키 (비대칭)</span> <span class="cb sym">⑥ 확인: MAC (대칭)</span></td></tr>
       <tr><td>⑧</td><td>브라우저</td><td>{<b>Finished</b>}</td><td>브라우저 쪽 대화도 같다는 확인</td><td><span class="cb sym">대칭키 암호화 (client 핸드셰이크 키)</span></td></tr>
       <tr><td>⑨</td><td>브라우저</td><td>[<b>GET /orders</b>] 애플리케이션 키 + AEAD</td><td>이후 데이터는 빠른 대칭 암호 + 변조 검출</td><td><span class="cb sym">대칭키 암호화 (애플리케이션 키 · AES-GCM)</span></td></tr>
     </table>
@@ -325,7 +325,7 @@ function packet(p, t) {
 const SC = {
   A: [
     { t: '출발: TCP 연결만 된 상태', d: 'TCP 3-way handshake가 끝났습니다. 아직 아무 비밀도 없어서, 지금부터 선 위를 지나는 건 <b>도청자가 전부 녹화</b>합니다.',
-      know: { C: ['서버 주소 api.example.com'], W: [], S: ['서버 개인키 🔑 (디스크에 보관)', '서버 인증서 (CA 서명됨)'] } },
+      know: { C: ['서버 주소 api.example.com', 'root store (루트 CA 인증서들)'], W: [], S: ['서버 개인키 🔑 (디스크에 보관)', '서버 인증서 (중간 CA가 서명)', '중간 CA 인증서 사본 (발급 때 같이 받음)'] } },
     { t: '① 브라우저 → ClientHello (평문)', d: '<b>브라우저가</b> 지원 버전·암호 스위트, <b>key_share(브라우저의 임시 DH 공개값 a·G)</b>, SNI, random을 보냅니다. 비밀 a는 <b>브라우저 안에만</b> 있고 보내지 않아요.',
       pkt: { from: 'C', name: '① ClientHello', sub: 'key_share(aG) · SNI · 스위트', enc: 0 },
       know: { C: ['임시 비밀 a (절대 안 보냄)'], W: ['ClientHello: aG(공개값) · SNI · 스위트'], S: ['브라우저의 공개값 aG'] } },
@@ -335,8 +335,8 @@ const SC = {
     { t: '양쪽이 각자 같은 공유 비밀을 계산 (ECDHE) — 선 위로는 아무것도 안 감', d: '<b>브라우저</b>: a × (bG) / <b>서버</b>: b × (aG) → <b>같은 값 abG</b>. 도청자는 aG와 bG만 가지고 있어서 abG를 계산할 수 없습니다(이산로그 문제). 여기서 <b>핸드셰이크 키</b>가 만들어지고, 이후는 전부 암호화됩니다.',
       k: 'key', glowC: 1, glowS: 1, keys: 1,
       know: { C: ['🔐 공유 비밀 abG → 핸드셰이크 키'], W: ['(새로 얻은 것 없음 — 비밀은 선 위로 안 지나감)'], S: ['🔐 공유 비밀 abG → 핸드셰이크 키'] } },
-    { t: '③④ 서버 → {EncryptedExtensions} {Certificate} (암호화)', d: '<b>서버가</b> 인증서 체인(서버 인증서 + 중간 CA)을 보냅니다. TLS 1.3에서는 <b>인증서도 암호화</b>돼서 도청자는 보라색(🔒) 덩어리만 녹화합니다.',
-      pkt: { from: 'S', name: '③④ Certificate', sub: '서버 인증서 + 중간 CA', enc: 1 },
+    { t: '③④ 서버 → {EncryptedExtensions} {Certificate} (암호화)', d: '<b>서버가</b> 인증서 체인(<b>서버 인증서 + 중간 CA 인증서</b>)을 보냅니다. 중간 CA 인증서는 서버가 인증서를 <b>발급받을 때 CA에게서 같이 받아 둔 공개 문서(사본)</b>입니다 — 중간 CA의 개인키가 아닙니다. TLS 1.3에서는 <b>인증서도 암호화</b>돼서 도청자는 보라색(🔒) 덩어리만 녹화합니다.',
+      pkt: { from: 'S', name: '③④ Certificate', sub: '서버 인증서 + 중간 CA 인증서', enc: 1 },
       know: { C: ['서버 인증서 체인 (공개키 포함)'], W: ['🔒 암호문 (못 읽음)'], S: [] } },
     { t: '⑤ 서버 → {CertificateVerify}: 개인키로 "대화 전체"에 서명', d: '<b>서버가</b> 지금까지의 대화(①~④) 전체를 <b>개인키로 서명</b>해 보냅니다. 인증서는 누구나 복사할 수 있지만 이 서명은 <b>개인키를 가진 진짜 주인만</b> 만들 수 있어요. TLS 1.3에서 개인키가 하는 일은 <b>이것 하나</b>입니다.',
       pkt: { from: 'S', name: '⑤ CertificateVerify', sub: '대화 전체에 개인키 서명 🖋', enc: 1 }, glowS: 1, sign: 1,
@@ -344,7 +344,7 @@ const SC = {
     { t: '⑥ 서버 → {Finished}', d: '<b>서버가</b> 대화 전체의 MAC(지문)을 보냅니다. 누가 중간에 ①②를 바꿔치기(예: 약한 스위트로 다운그레이드)했다면 여기서 값이 안 맞습니다.',
       pkt: { from: 'S', name: '⑥ Finished', sub: '대화 전체의 MAC', enc: 1 },
       know: { C: ['서버 Finished'], W: ['🔒 암호문'], S: [] } },
-    { t: '⑦ 브라우저가 검증 — 하나라도 실패하면 연결 중단', d: '<b>브라우저가</b> 순서대로 확인합니다: ① 서버 인증서 → 중간 CA → <b>루트 CA</b>(OS/브라우저 신뢰 저장소)까지 서명 체인 ② 도메인(SAN)이 api.example.com과 일치 ③ 유효기간·폐기 ④ <b>CertificateVerify 서명</b>을 인증서 공개키로 검증 ⑤ Finished MAC.',
+    { t: '⑦ 브라우저가 검증 — 하나라도 실패하면 연결 중단', d: '<b>브라우저가</b> 순서대로 확인합니다: ① 서명 체인 — 서버 인증서의 서명을 <b>중간 CA 인증서 안의 공개키</b>로, 중간 CA 인증서의 서명을 <b>root store의 루트 CA 공개키</b>로 확인 ② 도메인(SAN)이 api.example.com과 일치 ③ 유효기간·폐기 ④ <b>CertificateVerify 서명</b>을 서버 인증서 공개키로 검증 ⑤ Finished MAC.',
       k: 'good', glowC: 1, checks: 1,
       know: { C: ['✅ 상대가 진짜 api.example.com임을 확인'], W: [], S: [] } },
     { t: '⑧ 브라우저 → {Finished}', d: '<b>브라우저도</b> 자기가 본 대화의 MAC을 보냅니다. 서버가 확인하면 핸드셰이크 완료. 공유 비밀에서 <b>애플리케이션 키</b>를 만듭니다.',
@@ -359,7 +359,7 @@ const SC = {
   ],
   B: [
     { t: '출발: TCP 연결만 된 상태', d: '이번엔 <b>내가 답한 방식 = TLS 1.2의 RSA 키 교환</b>입니다. TLS 1.3에서는 제거됐어요.',
-      know: { C: ['서버 주소 api.example.com'], W: [], S: ['서버 개인키 🔑', '서버 인증서'] } },
+      know: { C: ['서버 주소 api.example.com', 'root store (루트 CA 인증서들)'], W: [], S: ['서버 개인키 🔑', '서버 인증서', '중간 CA 인증서 사본'] } },
     { t: '① 브라우저 → ClientHello (평문)', d: '<b>브라우저가</b> 지원 스위트와 random을 보냅니다. 이 방식엔 key_share가 없습니다.',
       pkt: { from: 'C', name: '① ClientHello', sub: '스위트 · random', enc: 0 },
       know: { C: [], W: ['ClientHello'], S: [] } },
@@ -452,16 +452,17 @@ const D4 = [
 ];
 const D5 = [
   { id: '5.1', who: ['S'], t: '서버가 보낼 내용을 준비 (아직 평문, 서버 메모리 안)',
-    d: '<b>서버가</b> 메시지 두 개를 만듭니다. ③ EncryptedExtensions는 "어떤 방식으로 대화할지"의 나머지 합의, ④ Certificate는 "이 공개키는 api.example.com의 것"이라는 CA 보증서 묶음입니다.',
-    C: ['server_write_key/iv (4.6)'], W: ['(아직 아무것도 안 지나감)'], S: ['server_write_key/iv (4.6)', '★ ③ EncryptedExtensions', '★ ④ Certificate (체인 2장)'],
+    d: '<b>서버가</b> 메시지 두 개를 만듭니다. ③ EncryptedExtensions는 "어떤 방식으로 대화할지"의 나머지 합의, ④ Certificate는 "이 공개키는 api.example.com의 것"이라는 CA 보증서 묶음입니다. 묶음 안의 <b>중간 CA 인증서</b>는 서버가 인증서를 발급받을 때 <b>CA에게서 같이 받은 사본</b>(Let\'s Encrypt의 fullchain.pem)이고, 루트 CA 인증서는 브라우저에 이미 있어서 안 보냅니다.',
+    C: ['server_write_key/iv (4.6)'], W: ['(아직 아무것도 안 지나감)'], S: ['server_write_key/iv (4.6)', '★ ③ EncryptedExtensions', '★ ④ Certificate = 서버 인증서 + 중간 CA 인증서'],
     ct: '평문 내용 — 이게 잠길 대상',
     calc: ['<span class="y">③ EncryptedExtensions</span>  <span class="m">(handshake 타입 8)</span>',
            '     ALPN = "h2"                      <span class="m">← HTTP/2로 하자</span>',
            '<span class="y">④ Certificate</span>          <span class="m">(handshake 타입 11)</span>',
-           '     [0] 서버 인증서   주인(SAN) = api.example.com · 서버 공개키 · 발급자 = 중간 CA',
-           '                       유효기간 2026-01-01 ~ 2026-12-31 · 중간 CA의 서명 ✍',
-           '     [1] 중간 CA 인증서 주인 = 중간 CA · 중간 CA 공개키 · 발급자 = 루트 CA · 루트 CA의 서명 ✍',
-           '<span class="m">     (루트 CA 인증서는 안 보냄 — 브라우저·OS에 이미 들어 있음)</span>',
+           '     [0] 서버 인증서       주인(SAN) = api.example.com · 서버 공개키 · 발급자 = 중간 CA',
+           '                           유효기간 2026-01-01 ~ 2026-12-31 · 중간 CA 개인키로 찍은 서명 ✍',
+           '     [1] 중간 CA 인증서    주인 = 중간 CA · 중간 CA 공개키 · 발급자 = 루트 CA · 루트 CA 개인키로 찍은 서명 ✍',
+           '<span class="m">         ↑ 서버가 가진 건 이 "인증서 사본"뿐. 중간 CA의 개인키는 CA 회사 금고 안</span>',
+           '<span class="m">     (루트 CA 인증서는 안 보냄 — 브라우저·OS의 root store에 이미 들어 있음)</span>',
            '<span class="m">→ 합쳐서 약 2.8KB. ⚠ 개인키는 여기 없다 — 인증서는 공개 문서</span>'] },
   { id: '5.2', who: ['S'], t: '상자에 넣기 — 진짜 종류는 안쪽에 숨긴다',
     d: '<b>서버가</b> 내용 뒤에 "이건 handshake 메시지(22)"라는 표시를 붙여 하나로 묶습니다. 이 표시까지 <b>같이 암호화</b>되기 때문에, 바깥에서는 이게 인증서인지 HTTP 데이터인지 구분할 수 없습니다.',
