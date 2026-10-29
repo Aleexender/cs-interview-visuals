@@ -274,6 +274,7 @@
       <div class="ln"><b>TLS 1.2 RSA</b>  암호문 ← <span class="bl">세션 키</span> ← master secret ← pre-master ← <span class="no">녹화본의 잠긴 pre-master + 인증서 개인키 🔑 → 열림 😱</span></div>
     </div>
     <div class="say">면접용: <b>"ECDHE의 Ephemeral은 핸드셰이크마다 새로 뽑고 끝나면 버리는 DH 개인값입니다. 이 값이 ECDHE의 입력이고, 그 출력인 공유 비밀에서 HKDF로 핸드셰이크 키와 애플리케이션 키라는 대칭키를 만듭니다. 서버 인증서 개인키는 CertificateVerify 서명에만 쓰여 이 계산 사슬에 없기 때문에, 나중에 유출돼도 과거 세션의 대칭키를 복원할 수 없습니다."</b></div>
+    <p class="dim" style="margin-top:14px;font-size:13.5px">꼬리질문: ECDHE는 상대가 누구인지 확인하지 않는데 중간자가 key_share를 바꿔치기하면? → <a style="color:var(--blue)" href="tls13-mitm-certificateverify.html">중간자 공격과 CertificateVerify</a></p>
   </section>
 </main>
 
