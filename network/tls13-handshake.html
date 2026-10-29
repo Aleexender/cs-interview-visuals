@@ -100,6 +100,28 @@
   @media (prefers-reduced-motion: reduce) { .cl { opacity: 1; animation: none; } .dbtn, .mbox { animation: none; } }
   @media (max-width: 900px) { .mcols { grid-template-columns: 1fr; } }
   @media (max-width: 900px) { canvas { height: 380px; } .two, .know { grid-template-columns: 1fr; } }
+  /* 5. 키의 족보 */
+  .cb.eph { background: #2a2140; color: #d6c2ff; border-color: #5b4690; }
+  .cb.long { background: #123335; color: #8ee6ec; border-color: #2a6b70; }
+  .kflow { display: grid; grid-template-columns: 150px 1fr 1fr 1fr; gap: 8px; margin-top: 14px; align-items: stretch; }
+  .kflow .h { font-weight: 800; font-size: 13.5px; padding: 2px 4px; }
+  .kflow .st { font-size: 12.5px; color: var(--dim); padding: 6px 8px 6px 0; border-right: 2px solid var(--line); }
+  .kflow .st b { color: var(--text); display: block; font-size: 13.5px; }
+  .kflow .gap { grid-column: 1 / -1; height: 1px; background: var(--line); margin: 6px 0; }
+  .kx { border: 2px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #141a21; font-size: 13.5px; }
+  .kx .tg { font-size: 11.5px; color: var(--dim); display: block; margin-bottom: 2px; }
+  .kx.eph { border-color: var(--violet); background: #1d1730; }
+  .kx.pub { border-color: #7a5a1f; background: #2a2416; }
+  .kx.sh { border-color: var(--violet); border-style: dashed; background: #1a1528; }
+  .kx.sym { border-color: #2f5f8f; background: #13202f; }
+  .kx.long { border-color: #2a6b70; background: #102526; }
+  .kx.wire { border-color: #6b2a35; background: #1f1418; }
+  .kx.gone { opacity: .6; border-style: dashed; }
+  .kx.none { border-color: transparent; background: transparent; color: var(--dim); }
+  .chain { background: #0d1116; border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; line-height: 1.95; margin-top: 12px; overflow-x: auto; }
+  .chain .ct { font-family: -apple-system, sans-serif; font-weight: 800; font-size: 13px; color: var(--mid); margin-bottom: 4px; }
+  .chain .ln { white-space: pre; }
+  @media (max-width: 900px) { .kflow { grid-template-columns: 1fr; } .kflow .st { border-right: 0; border-bottom: 2px solid var(--line); } .kflow .h { display: none; } }
 </style>
 </head>
 <body>
@@ -176,6 +198,82 @@
     <p class="dim" style="margin-top:14px;font-size:13.5px">근거:
       <a style="color:var(--blue)" href="https://datatracker.ietf.org/doc/html/rfc8446">RFC 8446 — TLS 1.3</a>
       (Figure 1 <i>"Message Flow for Full TLS Handshake"</i> · <i>"CertificateVerify: A signature over the entire handshake using the private key corresponding to the public key in the Certificate message."</i> · <i>"Static RSA and Diffie-Hellman cipher suites have been removed; all public-key based key exchange mechanisms now provide forward secrecy."</i>)</p>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span>키의 족보 — 임시 키는 어디서 나와서 어디로 가나</h2>
+    <div class="say" style="margin-top:0;border-left-color:var(--violet);background:#1d1730">
+      한 줄 요약: <b>임시 키(a, b)는 ECDHE의 입력</b>이고, <b>핸드셰이크 키·애플리케이션 키는 출력(대칭키)</b>입니다.
+      입력은 핸드셰이크가 끝나면 버립니다. <b>서버 인증서 개인키는 이 계산에 아예 들어가지 않고</b> 서명에만 씁니다.
+      <br><span class="dim">숫자는 장면 4 '자세히 보기'와 같은 작은 예시(p = 23, g = 5)입니다. 실제로는 X25519의 256비트 값입니다.</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+      <span class="cb eph">임시 키 (ECDHE 개인값)</span>
+      <span class="cb asym">공개값 (평문으로 보냄)</span>
+      <span class="cb eph" style="border-style:dashed">공유 비밀</span>
+      <span class="cb sym">대칭키</span>
+      <span class="cb long">장기 키 (인증서 개인키)</span>
+    </div>
+
+    <div class="kflow">
+      <div class="h"></div>
+      <div class="h ok">🟢 브라우저</div>
+      <div class="h no">🔴 선 위 (도청자 녹화본)</div>
+      <div class="h bl">🔵 서버</div>
+
+      <div class="st"><b>⓪ 핸드셰이크 직전</b>임시 키 생성</div>
+      <div class="kx eph"><span class="tg">임시 키 — 이번 연결 전용 난수</span><b>a = 6</b> 🔒 메모리에만</div>
+      <div class="kx none">— (아무것도 안 지나감)</div>
+      <div class="kx eph"><span class="tg">임시 키 — 이번 연결 전용 난수</span><b>b = 15</b> 🔒 메모리에만</div>
+
+      <div class="st"><b>① ② Hello 교환</b>임시 키 → 공개값</div>
+      <div class="kx pub"><span class="tg">key_share (ClientHello)</span>A = 5^<b>a</b> mod 23 = <b>8</b></div>
+      <div class="kx wire"><span class="tg">평문 녹화</span><b>8</b>, <b>19</b> <span class="dim">(+ p = 23, g = 5)</span></div>
+      <div class="kx pub"><span class="tg">key_share (ServerHello)</span>B = 5^<b>b</b> mod 23 = <b>19</b></div>
+
+      <div class="st"><b>ECDHE 계산</b>상대 공개값 × 내 임시 키</div>
+      <div class="kx sh"><span class="tg">공유 비밀</span>19^<b>6</b> mod 23 = <b>2</b></div>
+      <div class="kx wire"><span class="tg">도청자의 시도</span>8, 19만으로는 2를 못 만듦 ❌<br><span class="dim">a나 b가 있어야 함</span></div>
+      <div class="kx sh"><span class="tg">공유 비밀</span>8^<b>15</b> mod 23 = <b>2</b></div>
+
+      <div class="st"><b>HKDF</b>공유 비밀 + 대화 해시 H</div>
+      <div class="kx sym"><span class="tg">핸드셰이크 키 (대칭 · 방향별 2개)</span>③~⑧ 메시지 암호화</div>
+      <div class="kx wire"><span class="tg">녹화</span>🔒 인증서·CertificateVerify·Finished 암호문<br><span class="dim">H는 계산 가능하지만 공유 비밀이 없어 막힘</span></div>
+      <div class="kx sym"><span class="tg">핸드셰이크 키 (대칭 · 방향별 2개)</span>같은 값을 각자 계산</div>
+
+      <div class="st"><b>key schedule 이어서</b>Handshake → Master Secret</div>
+      <div class="kx sym"><span class="tg">애플리케이션 키 (대칭)</span>⑨ GET /orders 이후 데이터</div>
+      <div class="kx wire"><span class="tg">녹화</span>🔒 HTTP 암호문</div>
+      <div class="kx sym"><span class="tg">애플리케이션 키 (대칭)</span>같은 값을 각자 계산</div>
+
+      <div class="st"><b>핸드셰이크 끝</b>재료 폐기</div>
+      <div class="kx eph gone"><span class="tg">폐기</span>🗑 a 삭제 <span class="dim">(공유 비밀·핸드셰이크 키도 쓰고 나면 삭제)</span></div>
+      <div class="kx wire"><span class="tg">녹화본에 영원히 남는 것</span>8, 19, 암호문뿐</div>
+      <div class="kx eph gone"><span class="tg">폐기</span>🗑 b 삭제</div>
+
+      <div class="gap"></div>
+
+      <div class="st"><b>별도 라인: 장기 키</b>키 계산과 무관</div>
+      <div class="kx long"><span class="tg">인증서 공개키로</span>⑦ CertificateVerify 서명 확인</div>
+      <div class="kx wire"><span class="tg">녹화</span>🔒 CertificateVerify (핸드셰이크 키로 암호화돼 지나감)</div>
+      <div class="kx long"><span class="tg">인증서 개인키 🔑 — 디스크에 수개월~수년 보관</span>⑤ CertificateVerify <b>서명에만</b> 사용.<br>위의 a·b·공유 비밀·대칭키 계산에는 <b>안 들어감</b></div>
+    </div>
+
+    <table style="margin-top:18px">
+      <tr><th>키</th><th>종류</th><th>언제 생기나</th><th>수명</th><th>어디에 쓰나</th><th>선 위로?</th><th>2년 뒤 털리면</th></tr>
+      <tr><td><span class="cb long">인증서 개인키</span></td><td>비대칭 (장기)</td><td>인증서 발급 때</td><td>수개월~수년</td><td>⑤ CertificateVerify 서명</td><td>❌</td><td>그 뒤 접속에서 서버 사칭은 가능. <b class="ok">과거 대화는 안전</b></td></tr>
+      <tr><td><span class="cb eph">임시 키 a, b</span></td><td>비대칭 계열 (ECDHE 개인값)</td><td>핸드셰이크마다 새로</td><td>핸드셰이크 1회</td><td>공유 비밀 계산 (입력)</td><td>❌ 공개값 aG·bG만</td><td><b class="ok">이미 폐기돼서 털릴 게 없음</b></td></tr>
+      <tr><td><span class="cb sym">핸드셰이크 키</span></td><td>대칭 (AES-GCM 등)</td><td>공유 비밀 → HKDF (출력)</td><td>⑧ Finished까지</td><td>③~⑧ 메시지 암호화</td><td>❌</td><td>— (폐기됨)</td></tr>
+      <tr><td><span class="cb sym">애플리케이션 키</span></td><td>대칭 (AES-GCM 등)</td><td>같은 key schedule에서 이어서</td><td>연결 동안</td><td>⑨ 이후 HTTP 데이터</td><td>❌</td><td>— (폐기됨)</td></tr>
+    </table>
+
+    <div class="chain">
+      <div class="ct">2년 뒤 녹화본을 열려면 무엇이 필요한가 — 거꾸로 따라가 보기</div>
+      <div class="ln"><b>TLS 1.3</b>      암호문 ← <span class="bl">애플리케이션 키</span> ← <span class="vi">공유 비밀</span> ← <span class="vi">a 또는 b</span> ← <span class="ok">이미 폐기됨 → 막힘 ✅</span></div>
+      <div class="ln">              인증서 개인키 🔑 → 이 사슬 어디에도 없음 → 훔쳐도 소용없음</div>
+      <div class="ln"><b>TLS 1.2 RSA</b>  암호문 ← <span class="bl">세션 키</span> ← master secret ← pre-master ← <span class="no">녹화본의 잠긴 pre-master + 인증서 개인키 🔑 → 열림 😱</span></div>
+    </div>
+    <div class="say">면접용: <b>"ECDHE의 Ephemeral은 핸드셰이크마다 새로 뽑고 끝나면 버리는 DH 개인값입니다. 이 값이 ECDHE의 입력이고, 그 출력인 공유 비밀에서 HKDF로 핸드셰이크 키와 애플리케이션 키라는 대칭키를 만듭니다. 서버 인증서 개인키는 CertificateVerify 서명에만 쓰여 이 계산 사슬에 없기 때문에, 나중에 유출돼도 과거 세션의 대칭키를 복원할 수 없습니다."</b></div>
   </section>
 </main>
 
